@@ -36,6 +36,7 @@
 - [x] Inspect the two upstream READMEs, licenses, runtime manifests and OpenShorts API entrypoint.
 - [x] Confirm the OpenShorts fork and create an isolated feature branch.
 - [x] Document the integration architecture and licensing constraints.
+- [x] Research Postline's official provider adapter contracts and document Python porting requirements.
 - [ ] Map the existing FastAPI job lifecycle and publishing paths.
 - [ ] Replace/extend Upload-Post with separately modeled official provider adapters.
 - [ ] Add scheduling and per-platform publishing state based on the existing application architecture.

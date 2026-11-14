@@ -117,3 +117,12 @@ async def load_connection_credentials(
         owner_id=owner_id, connection_id=connection_id,
         provider=connection.provider, encrypted=encrypted,
     )
+
+
+async def close_native_social_database() -> None:
+    """Dispose the isolated native-social connection pool on application shutdown."""
+    global _engine, _sessions
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _sessions = None

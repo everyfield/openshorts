@@ -30,25 +30,60 @@ class PermissionPolicyTests(unittest.TestCase):
     def test_missing_record_blocks(self):
         self.assertFalse(evaluate_publish_permission(None, "youtube", now=NOW).allowed)
 
-    def test_silence_or_unrequested_state_blocks(self):
+    def test_non_approved_states_block(self):
         for state in ("UNREQUESTED", "DRAFT", "REQUESTED", "REJECTED", "EXPIRED", "REVOKED"):
             with self.subTest(state=state):
                 result = evaluate_publish_permission(approved(status=state), "youtube", now=NOW)
                 self.assertFalse(result.allowed)
 
+    def test_invalid_state_blocks(self):
+        self.assertEqual(
+            evaluate_publish_permission(approved(status="APPROVE"), "youtube", now=NOW).reason,
+            "permission_state_invalid",
+        )
+
+    def test_missing_or_naive_approval_timestamp_blocks(self):
+        self.assertFalse(evaluate_publish_permission(
+            approved(approved_at=None), "youtube", now=NOW
+        ).allowed)
+        self.assertEqual(evaluate_publish_permission(
+            approved(approved_at=datetime(2026, 11, 13)), "youtube", now=NOW
+        ).reason, "approval_timestamp_missing_or_invalid")
+
+    def test_future_approval_timestamp_blocks(self):
+        self.assertEqual(evaluate_publish_permission(
+            approved(approved_at=NOW + timedelta(seconds=1)), "youtube", now=NOW
+        ).reason, "approval_timestamp_in_future")
+
     def test_expired_permission_blocks_at_boundary(self):
-        permission = approved(expires_at=NOW)
-        result = evaluate_publish_permission(permission, "youtube", now=NOW)
-        self.assertEqual(result.reason, "permission_expired")
+        self.assertEqual(
+            evaluate_publish_permission(approved(expires_at=NOW), "youtube", now=NOW).reason,
+            "permission_expired",
+        )
+
+    def test_naive_expiry_blocks(self):
+        self.assertEqual(evaluate_publish_permission(
+            approved(expires_at=datetime(2026, 11, 15)), "youtube", now=NOW
+        ).reason, "expiry_must_be_timezone_aware")
 
     def test_revoked_permission_blocks(self):
-        permission = approved(revoked_at=NOW - timedelta(seconds=1))
-        result = evaluate_publish_permission(permission, "youtube", now=NOW)
-        self.assertEqual(result.reason, "permission_revoked")
+        self.assertEqual(evaluate_publish_permission(
+            approved(revoked_at=NOW - timedelta(seconds=1)), "youtube", now=NOW
+        ).reason, "permission_revoked")
+
+    def test_naive_revocation_timestamp_blocks(self):
+        self.assertEqual(evaluate_publish_permission(
+            approved(revoked_at=datetime(2026, 11, 13)), "youtube", now=NOW
+        ).reason, "revocation_timestamp_invalid")
 
     def test_platform_scope_is_enforced(self):
-        result = evaluate_publish_permission(approved(), "tiktok", now=NOW)
-        self.assertEqual(result.reason, "platform_not_authorized")
+        self.assertEqual(
+            evaluate_publish_permission(approved(), "tiktok", now=NOW).reason,
+            "platform_not_authorized",
+        )
+
+    def test_empty_platform_blocks(self):
+        self.assertFalse(evaluate_publish_permission(approved(), "", now=NOW).allowed)
 
     def test_commercial_and_editing_scopes_are_enforced(self):
         self.assertFalse(evaluate_publish_permission(
@@ -61,10 +96,9 @@ class PermissionPolicyTests(unittest.TestCase):
         ).allowed)
 
     def test_naive_clock_is_rejected(self):
-        result = evaluate_publish_permission(
+        self.assertEqual(evaluate_publish_permission(
             approved(), "youtube", now=datetime(2026, 11, 14, 12, 0)
-        )
-        self.assertEqual(result.reason, "clock_must_be_timezone_aware")
+        ).reason, "clock_must_be_timezone_aware")
 
 
 if __name__ == "__main__":

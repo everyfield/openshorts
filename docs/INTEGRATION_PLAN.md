@@ -60,8 +60,9 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 - [x] Map existing Upload-Post publishing/status path and account credential boundary.
 - [x] Inspect current dashboard social account/Autopilot entry points and existing social regression tests.
 - [x] Identify the persistence/migration licensing boundary and document the native publishing data model.
-- [ ] Decide and implement a core persistence/migration contract without importing `cloud/`.
-- [ ] Add owner-scoped native connection, encrypted credential and publication repositories with tests.
+- [x] Implement isolated native-social SQLAlchemy metadata/bootstrap and owner-scoped connection/credential repository without importing `cloud/`.
+- [x] Add KMS-backed AES-256-GCM envelope encryption with tenant/provider-bound authenticated context and no plaintext fallback.
+- [ ] Add a versioned native-social migration runner and PostgreSQL repository integration tests.
 - [x] Add a provider-neutral Python protocol, typed request/result models, and state-transition/retry unit tests; provider HTTP mock tests remain pending.
 - [ ] Implement and test YouTube native publishing.
 - [ ] Implement and test Instagram native publishing.
@@ -73,7 +74,7 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 
 ## Current limitations
 
-This branch now includes provider-neutral runtime contracts and state-transition/retry unit tests, in addition to planning and verified runtime mapping. No concrete provider adapter, OAuth flow, credential store, durable publication ledger, scheduler, or native dashboard workflow has been implemented. The new tests have not been executed in a real checkout; no backend/frontend suite or live provider test has been run. Permission management and evidence storage are intentionally deferred and are not part of the current implementation scope.
+This branch now includes provider-neutral runtime contracts, state-transition/retry helpers, isolated native-social tables, owner-scoped credential persistence, and KMS-backed credential encryption. Concrete provider adapters, OAuth routes, token refresh/revocation, durable scheduling/worker recovery, and native dashboard workflows remain unimplemented. Tests have not been executed in a real checkout; no PostgreSQL integration, backend/frontend suite, or live provider test has been run. Permission management and evidence storage are intentionally deferred.
 
 
 ## Native persistence implementation update (2026-11-15)

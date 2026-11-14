@@ -142,6 +142,6 @@ Remaining: stable public HTTPS media delivery, durable Reel container/publish wo
 - Added an authenticated settings card for native Instagram Business/Creator accounts.
 - The dashboard requests the OAuth URL through the authenticated API client (so the stored bearer session is sent); it does not navigate directly to an endpoint that would lose the Authorization header.
 - Added owner-scoped connection listing and disconnect endpoints. Disconnect deletes the connection row and its encrypted credential through the database foreign-key cascade; the user is informed that app access can also be revoked in Instagram settings.
-- OAuth callback now returns to the dashboard Settings tab and reports a non-sensitive success/error status.
+- OAuth callback now returns to the configured `FRONTEND_URL` Settings tab and reports a non-sensitive success/error status. The connect endpoint returns an authorization URL as JSON so the dashboard can attach its bearer session before redirecting to Meta.
 - The account card is explicitly labeled as native publishing in progress. It does not claim Reels publishing is already wired to generated clips.
 - Frontend build, browser OAuth round-trip, PostgreSQL cascade behavior, and live Instagram tests remain unexecuted.

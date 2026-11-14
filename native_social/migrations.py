@@ -31,6 +31,10 @@ async def apply_native_social_migrations(connection: AsyncConnection) -> None:
         "SELECT version FROM native_social_schema_migrations"
     ))
     applied = {int(row[0]) for row in result.fetchall()}
+    known_versions = {version for version, _ in MIGRATIONS}
+    unknown_versions = applied - known_versions
+    if unknown_versions:
+        raise RuntimeError(f"Database schema is newer than this application: {sorted(unknown_versions)}")
     for version, migration in MIGRATIONS:
         if version in applied:
             continue

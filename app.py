@@ -4079,6 +4079,10 @@ app = FastAPI(lifespan=lifespan)
 if BILLING_ENABLED:
     cloud.setup_sync(app)
 
+    # Native Instagram OAuth is hosted-only and uses the authenticated SaaS user.
+    from native_social.routes import router as _instagram_router
+    app.include_router(_instagram_router)
+
 # MCP server (/mcp): the pipeline as agent-callable tools. Works in both modes —
 # cloud requires an osk_ API key, self-host keeps BYOK (see mcp_server.py).
 import mcp_server as _mcp_server

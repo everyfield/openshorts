@@ -65,7 +65,7 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 - [x] Add a versioned native-social migration runner with a PostgreSQL advisory lock; PostgreSQL integration tests remain pending.
 - [x] Add a provider-neutral Python protocol, typed request/result models, and state-transition/retry unit tests; provider HTTP mock tests remain pending.
 - [ ] Implement and test YouTube native publishing.
-- [ ] Implement and test Instagram native publishing.
+- [x] Implement Instagram Login OAuth start/callback with DB-backed hashed, expiring, single-use state and authenticated tenant ownership.\n- [x] Persist validated professional-account tokens through KMS envelope encryption.\n- [ ] Implement and test end-to-end Instagram Reels publishing.
 - [ ] Implement and test TikTok Content Posting API, keeping public Direct Post disabled until audit requirements are met.
 - [ ] Add durable scheduling, idempotency, reconciliation, and restart recovery.
 - [ ] Connect native account workflows and per-target publication states to a separate dashboard section.
@@ -121,4 +121,17 @@ Added `native_social/instagram.py`:
 - Public HTTPS media URL validation; localhost and private/reserved IP literals are rejected.
 - Mock tests for OAuth, account validation, Reels container creation/status, publish, URL validation, and token-safe error messages.
 
-This is an API transport foundation only. OAuth state storage/CSRF validation, callback routes, encrypted token persistence wiring, job/media URL integration, durable publication state, and dashboard UI remain pending. Instagram supports professional Business/Creator accounts, not personal consumer accounts. Meta's official collection documents the Instagram Login permissions and the container → status → publish workflow.
+This is an API transport foundation only. Authenticated OAuth start/callback, DB-backed single-use state validation, professional-account verification, and KMS-encrypted token persistence are now implemented. Remaining work: connect generated clips to stable public HTTPS media storage, durable create/poll/publish orchestration with duplicate-publish reconciliation, connection management/disconnect/refresh lifecycle, dashboard UI, PostgreSQL integration tests, and a provider-approved live test. The routes are registered only in hosted billing mode. The callback redirects to the application root with a fixed status query; frontend status handling is not yet implemented. Instagram supports professional Business/Creator accounts, not personal consumer accounts. Meta's official collection documents the Instagram Login permissions and the container → status → publish workflow.
+
+
+### Instagram OAuth route implementation update (2026-11-15)
+
+Implemented on the feature branch:
+- Hosted-only FastAPI routes: `GET /api/native-social/instagram/connect` and `GET /api/native-social/instagram/callback`.
+- Connect requires the existing SaaS authenticated-user dependency; owner IDs are never accepted from client input.
+- OAuth state is generated with a cryptographically secure random generator, stored only as a SHA-256 digest, expires after 10 minutes, and is consumed atomically once in PostgreSQL. Expired/old consumed rows are pruned when a new connection starts.
+- Callback exchanges the authorization code, obtains a long-lived token, validates the professional account, and stores credentials through the KMS-backed repository.
+- Callback failures return a fixed relative dashboard redirect and do not expose provider errors, authorization codes, state values, or tokens.
+- Added focused tests for state hashing and fixed redirect behavior. These tests have not been executed in a real checkout.
+
+Remaining: stable public HTTPS media delivery, durable Reel container/publish worker with duplicate-publish reconciliation, refresh/disconnect lifecycle, dashboard integration, PostgreSQL integration tests, and Meta-approved live account validation/publication. Set `INSTAGRAM_REDIRECT_URI` to the exact callback URL `https://<your-api-host>/api/native-social/instagram/callback`. Hosted runtime also requires `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `NATIVE_SOCIAL_KMS_KEY_ID`, and the app role's KMS permissions.

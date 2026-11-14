@@ -12,7 +12,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
-from .types import AccountHealth, ProviderAccount, ProviderOperation, PublishRequest, PublishResult, PublishStatus
+from .types import AccountHealth, ProviderAccount, ProviderOperation, PublishStatus
 
 
 AUTH_BASE = "https://www.instagram.com/oauth/authorize"
@@ -190,23 +190,6 @@ class InstagramAPI:
         if not media_id:
             raise InstagramAPIError("Instagram publish response omitted media ID")
         return media_id
-
-    async def publish(self, request: PublishRequest) -> PublishResult:
-        """Create a Reel container only; scheduler must poll and publish separately."""
-        raise InstagramAPIError(
-            "Use create_reel_container, poll until FINISHED, then publish_container; "
-            "the provider contract cannot safely hide this multi-step workflow"
-        )
-
-    async def get_publish_status(self, operation_id: str) -> ProviderOperation:
-        raise InstagramAPIError("Instagram status lookup requires the stored access token")
-
-    async def revoke_account(self, account_id: str) -> None:
-        # Instagram Login currently has no equivalent per-account revoke endpoint
-        # in this adapter. Remove the encrypted credential and mark the connection
-        # revoked; users can also revoke the app in Instagram settings.
-        return None
-
 
 def _json_or_error(response: httpx.Response, message: str) -> dict[str, Any]:
     try:

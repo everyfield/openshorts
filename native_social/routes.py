@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from starlette.responses import RedirectResponse
 
 from cloud.auth import get_current_user_required
@@ -36,10 +36,15 @@ async def instagram_connect(request: Request):
     digest = _state_digest(raw_state)
     async with native_social_session() as session:
         async with session.begin():
+            now = datetime.now(timezone.utc)
+            await session.execute(delete(OAuthState).where(
+                (OAuthState.expires_at < now) |
+                (OAuthState.consumed_at < now - timedelta(days=1))
+            ))
             session.add(OAuthState(
                 state_hash=digest,
                 owner_id=user.id,
-                expires_at=datetime.now(timezone.utc) + timedelta(minutes=STATE_TTL_MINUTES),
+                expires_at=now + timedelta(minutes=STATE_TTL_MINUTES),
             ))
     api = InstagramAPI()
     try:

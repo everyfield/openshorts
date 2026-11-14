@@ -19,3 +19,4 @@ def test_oauth_callback_redirect_is_fixed_and_relative():
     assert parsed.netloc == ""
     assert parsed.path == "/"
     assert parsed.query == "instagram_connect=success"
+    assert parsed.fragment == "app?tab=settings"

@@ -32,7 +32,7 @@
 
 ## Verified existing publishing path
 
-See [OPENSHORTS_RUNTIME_MAPPING.md](./OPENSHORTS_RUNTIME_MAPPING.md) for the inspected implementation details.
+See [OPENSHORTS_RUNTIME_MAPPING.md](./OPENSHORTS_RUNTIME_MAPPING.md).
 
 - FastAPI `POST /api/social/post` currently submits to Upload-Post.
 - `GET /api/social/post-status/{request_id}` polls Upload-Post and returns per-platform results.
@@ -40,24 +40,37 @@ See [OPENSHORTS_RUNTIME_MAPPING.md](./OPENSHORTS_RUNTIME_MAPPING.md) for the ins
 - Current social account connection/profile discovery is Upload-Post-specific.
 - `yt_account.py` and `yt_clients.py` are for yt-dlp extraction/download, not social publishing OAuth or Data API uploads.
 
+## Persistence and dashboard findings
+
+See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
+
+- The inspected core tree has no independent core social-account/publishing persistence model or migration set.
+- Root `alembic/env.py` imports `cloud.database.Base` and `cloud.models`; using it for new core schema would couple the MIT core to separately licensed code.
+- `AccountPage.jsx` is account/billing UI; `AutopilotTab.jsx` is coupled to cloud Autopilot and Upload-Post. Neither is a neutral native provider connection manager.
+- Existing social profile tests exercise Upload-Post/cloud behavior, not native OAuth or durable native publishing.
+- A core-compatible database/migration boundary must be established before creating native account/credential/publication tables. Do not assume the open-source core has the cloud PostgreSQL schema.
+- Native provider connections and publishing UI must be separate from existing Upload-Post/Autopilot until native parity is verified.
+
 ## Delivery sequence
 
-- [x] Inspect the two upstream READMEs, licenses, runtime manifests and OpenShorts API entrypoint.
+- [x] Inspect upstream READMEs, licenses, runtime manifests and OpenShorts API entrypoint.
 - [x] Confirm the OpenShorts fork and create an isolated feature branch.
-- [x] Document the integration architecture and licensing constraints.
-- [x] Research Postline's official provider adapter contracts and document Python porting requirements.
-- [x] Map the existing Upload-Post publishing/status path and account credential boundary.
-- [ ] Inspect the job persistence model and dashboard social-account/publishing UI in detail.
-- [ ] Design durable native social-account credentials and per-platform publication records.
+- [x] Document integration architecture and licensing constraints.
+- [x] Research Postline provider adapter contracts and Python porting requirements.
+- [x] Map existing Upload-Post publishing/status path and account credential boundary.
+- [x] Inspect current dashboard social account/Autopilot entry points and existing social regression tests.
+- [x] Identify the persistence/migration licensing boundary and document the native publishing data model.
+- [ ] Decide and implement a core persistence/migration contract without importing `cloud/`.
+- [ ] Add owner-scoped native connection, encrypted credential and publication repositories with tests.
 - [ ] Add a Python provider protocol and mocked transport tests without changing Upload-Post behavior.
 - [ ] Implement and test YouTube native publishing.
 - [ ] Implement and test Instagram native publishing.
 - [ ] Implement and test TikTok Content Posting API, keeping public Direct Post disabled until audit requirements are met.
 - [ ] Add durable scheduling, idempotency, reconciliation, and restart recovery.
-- [ ] Connect dashboard account workflows and per-target publication states to real APIs.
+- [ ] Connect native account workflows and per-target publication states to a separate dashboard section.
 - [ ] Run backend, frontend and end-to-end tests in a real checkout.
 - [ ] Verify provider publication only with provider-approved test accounts.
 
 ## Current limitations
 
-This branch contains integration planning and verified runtime mapping only. No native provider adapter, OAuth flow, credential store, durable publication ledger, scheduler, or dashboard workflow has been implemented. No backend/frontend tests or live provider tests have been run. Permission management and evidence storage are intentionally deferred and are not part of the current implementation scope.
+This branch contains integration planning and verified runtime mapping only. No native provider adapter, OAuth flow, credential store, durable publication ledger, scheduler, or native dashboard workflow has been implemented. No backend/frontend tests or live provider tests have been run. Permission management and evidence storage are intentionally deferred and are not part of the current implementation scope.

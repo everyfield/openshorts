@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from .models import Base
+from .models import Base, OAuthState
 
 
 async def _initial_schema(connection: AsyncConnection) -> None:
@@ -12,8 +12,13 @@ async def _initial_schema(connection: AsyncConnection) -> None:
     await connection.run_sync(Base.metadata.create_all)
 
 
+async def _oauth_state_schema(connection: AsyncConnection) -> None:
+    await OAuthState.__table__.create(connection, checkfirst=True)
+
+
 MIGRATIONS = (
     (1, _initial_schema),
+    (2, _oauth_state_schema),
 )
 
 

@@ -92,3 +92,18 @@ Not implemented yet:
 - Repository/database integration tests against PostgreSQL.
 - Tests have not been executed in a real checkout. The schema currently uses isolated SQLAlchemy `create_all` for new tables; it does not yet have a versioned native-social migration runner. Existing tables are not altered by `create_all`.
 - Hosted deployment must configure the KMS key and grant the application role `kms:GenerateDataKey` and `kms:Decrypt` on that key before OAuth credentials can be stored or read.
+
+
+## YouTube API transport implementation update (2026-11-15)
+
+Added `native_social/youtube.py` using the official YouTube Data API v3 endpoints:
+- Server-side refresh-token exchange at Google's OAuth token endpoint.
+- Authenticated `channels.list(mine=true)` account validation.
+- `videos.insert` resumable upload using 8 MiB chunks and upload-session status reconciliation after transport/5xx failures.
+- Read-only `videos.list` processing/publication status lookup.
+- Google OAuth token revocation.
+- Private visibility is the default. Public and unlisted uploads are blocked unless the deployment explicitly enables the post-audit gate.
+- Upload session URLs are accepted only on HTTPS `www.googleapis.com`; they are not logged.
+- Mock HTTP tests cover refresh, account validation, resumable chunk transfer, private-only gate, and status mapping.
+
+The transport client is not yet wired to OAuth start/callback routes, the encrypted credential repository, or the existing clip-job media resolver. Do not treat YouTube publishing as end-to-end available yet. The tests have not been run in a real checkout.

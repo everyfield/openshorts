@@ -5,6 +5,7 @@ videos.list status, and token revocation endpoints. No browser automation.
 """
 from __future__ import annotations
 
+import mimetypes
 import os
 from pathlib import Path
 from typing import Any
@@ -112,10 +113,13 @@ class YouTubeDataAPI:
         if not path.is_file():
             raise YouTubeAPIError("Rendered media file does not exist")
         size = path.stat().st_size
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         if size <= 0:
             raise YouTubeAPIError("Rendered media file is empty")
         if size > 256 * 1024 * 1024 * 1024:
             raise YouTubeAPIError("Video exceeds YouTube Data API 256 GB upload limit")
+        if not title.strip():
+            raise ValueError("YouTube video title is required")
         if privacy_status not in {"private", "unlisted", "public"}:
             raise ValueError("Invalid YouTube privacy status")
         if privacy_status != "private" and not self.public_posting_approved:
@@ -141,7 +145,7 @@ class YouTubeDataAPI:
                     **_bearer(access_token),
                     "Content-Type": "application/json; charset=UTF-8",
                     "X-Upload-Content-Length": str(size),
-                    "X-Upload-Content-Type": "video/*",
+                    "X-Upload-Content-Type": media_type,
                 },
                 json=metadata,
             )
@@ -162,7 +166,7 @@ class YouTubeDataAPI:
 
         try:
             video_id = await self._transfer_resumable(
-                access_token=access_token, upload_url=upload_url, path=path, size=size,
+                access_token=access_token, upload_url=upload_url, path=path, size=size, media_type=media_type,
             )
         except AmbiguousYouTubeUpload:
             raise
@@ -175,6 +179,7 @@ class YouTubeDataAPI:
 
     async def _transfer_resumable(
         self, *, access_token: str, upload_url: str, path: Path, size: int,
+        media_type: str,
     ) -> str:
         offset = 0
         reconciliations = 0
@@ -189,7 +194,7 @@ class YouTubeDataAPI:
                         upload_url,
                         headers={
                             **_bearer(access_token),
-                            "Content-Type": "video/*",
+                            "Content-Type": media_type,
                             "Content-Length": str(len(chunk)),
                             "Content-Range": f"bytes {offset}-{end}/{size}",
                         },

@@ -103,3 +103,19 @@ Add a separate dashboard section for native social connections and native publis
 ## Explicit exclusions
 
 No creator outreach, permission request automation, approval workflow, evidence upload, or permission/evidence storage. No modifications to `cloud/` or its separately licensed code. No automatic live publishing until the relevant provider app/account approval and integration tests are complete.
+
+
+## Implementation status update (2026-11-15)
+
+The following foundation is now implemented on the feature branch:
+- `native_social/models.py` defines isolated native connection, encrypted credential, publish job and per-platform target tables.
+- `native_social/persistence.py` initializes only those tables using its own SQLAlchemy metadata and provides owner-scoped credential store/load operations.
+- `native_social/crypto.py` implements KMS envelope encryption with AES-256-GCM and tenant/provider-bound authenticated context.
+- `app.py` initializes the isolated persistence pool only in hosted/billing mode and disposes it at shutdown. The existing cloud DB engine and cloud models are not imported by the native-social persistence package.
+- `tests/test_native_social_crypto.py` adds four encryption tests.
+
+Remaining limitations:
+- The database schema currently bootstraps new tables with SQLAlchemy `create_all`; a versioned migration runner is not implemented. `create_all` will not alter existing tables.
+- OAuth routes, provider adapters, refresh rotation, revoke flow, API endpoints and dashboard UI remain pending.
+- No PostgreSQL integration tests or real-checkout test execution has been performed.
+- Set `NATIVE_SOCIAL_KMS_KEY_ID` and grant the service role KMS `GenerateDataKey` and `Decrypt` permissions. Without KMS, token encryption/decryption fails closed.

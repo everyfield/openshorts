@@ -103,8 +103,12 @@ async def load_connection_credentials(
     connection = result.scalar_one_or_none()
     if connection is None:
         raise LookupError("Social connection not found")
-    credential = await session.get(SocialCredential, connection_id)
-    if credential is None or credential.owner_id != owner_id:
+    credential_result = await session.execute(select(SocialCredential).where(
+        SocialCredential.connection_id == connection_id,
+        SocialCredential.owner_id == owner_id,
+    ))
+    credential = credential_result.scalar_one_or_none()
+    if credential is None:
         raise LookupError("Social credentials not found")
     encrypted = EncryptedCredentials(
         encrypted_data_key=credential.encrypted_data_key,

@@ -12,6 +12,7 @@ from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
 
 from cloud.auth import get_current_user_required
+from cloud.config import settings
 from native_social.crypto import KMSCredentialCipher
 from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection
@@ -27,7 +28,7 @@ def _state_digest(value: str) -> str:
 
 def _dashboard_redirect(result: str) -> RedirectResponse:
     # Fixed same-origin relative destination; no user-controlled redirect target.
-    return RedirectResponse(url=f"/?instagram_connect={result}#app?tab=settings", status_code=303)
+    return RedirectResponse(url=f"{settings.frontend_url}/?instagram_connect={result}#app?tab=settings", status_code=303)
 
 
 @router.get("/connect")

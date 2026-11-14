@@ -98,3 +98,13 @@ class PublishTarget(Base):
     __table_args__ = (
         UniqueConstraint("publish_job_id", "connection_id", name="uq_native_publish_job_connection"),
     )
+
+
+class OAuthState(Base):
+    """Single-use, hashed OAuth state bound to an authenticated tenant."""
+    __tablename__ = "native_social_oauth_states"
+    state_hash = Column(String(64), primary_key=True)
+    owner_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

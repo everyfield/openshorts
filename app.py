@@ -4069,6 +4069,9 @@ async def lifespan(app: FastAPI):
                      and not _queue_mode.killed())
     yield
     # Cleanup (optional: cancel worker)
+    if BILLING_ENABLED:
+        from native_social.persistence import close_native_social_database
+        await close_native_social_database()
 
 app = FastAPI(lifespan=lifespan)
 

@@ -1,6 +1,7 @@
 """Focused tests for Instagram OAuth route safety helpers."""
 from urllib.parse import urlsplit
 
+from cloud.config import settings
 from native_social.routes import _dashboard_redirect, _state_digest
 
 
@@ -15,8 +16,8 @@ def test_oauth_state_is_stored_as_one_way_sha256_digest():
 def test_oauth_callback_redirect_is_fixed_and_relative():
     response = _dashboard_redirect("success")
     parsed = urlsplit(response.headers["location"])
-    assert parsed.scheme == ""
-    assert parsed.netloc == ""
+    expected = settings.frontend_url.rstrip("/")
+    assert response.headers["location"].startswith(expected + "/")
     assert parsed.path == "/"
     assert parsed.query == "instagram_connect=success"
     assert parsed.fragment == "app?tab=settings"

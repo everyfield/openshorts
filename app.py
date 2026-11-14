@@ -4018,6 +4018,11 @@ async def lifespan(app: FastAPI):
                                 live_reservation_ids=_live_reservation_ids,
                                 sweep_active=lambda: not _draining,
                                 booted_at=_booted_at)
+        # Native social persistence owns its metadata and tables. It uses the
+        # hosted database URL but never imports cloud models or Alembic's
+        # cloud-bound metadata; OAuth tokens are encrypted separately with KMS.
+        from native_social.persistence import init_native_social_database
+        await init_native_social_database(_cloud_config.settings.database_url)
         # The jobs resumed above carry the priority of the plan at submit;
         # the DB is up now: owners who paid since go first (one lookup, which
         # never raises: a failure keeps the manifests' priorities).

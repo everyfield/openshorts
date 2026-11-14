@@ -62,7 +62,7 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 - [x] Identify the persistence/migration licensing boundary and document the native publishing data model.
 - [ ] Decide and implement a core persistence/migration contract without importing `cloud/`.
 - [ ] Add owner-scoped native connection, encrypted credential and publication repositories with tests.
-- [ ] Add a Python provider protocol and mocked transport tests without changing Upload-Post behavior.
+- [x] Add a provider-neutral Python protocol, typed request/result models, and state-transition/retry unit tests; provider HTTP mock tests remain pending.
 - [ ] Implement and test YouTube native publishing.
 - [ ] Implement and test Instagram native publishing.
 - [ ] Implement and test TikTok Content Posting API, keeping public Direct Post disabled until audit requirements are met.
@@ -73,4 +73,4 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 
 ## Current limitations
 
-This branch contains integration planning and verified runtime mapping only. No native provider adapter, OAuth flow, credential store, durable publication ledger, scheduler, or native dashboard workflow has been implemented. No backend/frontend tests or live provider tests have been run. Permission management and evidence storage are intentionally deferred and are not part of the current implementation scope.
+This branch now includes provider-neutral runtime contracts and state-transition/retry unit tests, in addition to planning and verified runtime mapping. No concrete provider adapter, OAuth flow, credential store, durable publication ledger, scheduler, or native dashboard workflow has been implemented. The new tests have not been executed in a real checkout; no backend/frontend suite or live provider test has been run. Permission management and evidence storage are intentionally deferred and are not part of the current implementation scope.

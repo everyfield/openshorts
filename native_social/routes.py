@@ -7,13 +7,13 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
 
 from cloud.auth import get_current_user_required
 from native_social.crypto import KMSCredentialCipher
 from native_social.instagram import InstagramAPI, InstagramAPIError
-from native_social.models import OAuthState
+from native_social.models import OAuthState, SocialConnection
 from native_social.persistence import native_social_session, store_connection_credentials
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
@@ -112,3 +112,54 @@ async def instagram_callback(request: Request, code: str | None = None,
     finally:
         await api.aclose()
     return _dashboard_redirect("success")
+
+
+@router.get("/connections")
+async def instagram_connections(request: Request):
+    user = await get_current_user_required(request)
+    async with native_social_session() as session:
+        result = await session.execute(
+            select(SocialConnection).where(
+                SocialConnection.owner_id == user.id,
+                SocialConnection.provider == "instagram",
+            ).order_by(SocialConnection.created_at.desc())
+        )
+        rows = result.scalars().all()
+        return {
+            "connections": [
+                {
+                    "id": str(row.id),
+                    "account_id": row.provider_account_id,
+                    "username": row.display_name,
+                    "health": row.health,
+                    "scopes": list(row.scopes or []),
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "last_validated_at": row.last_validated_at.isoformat() if row.last_validated_at else None,
+                }
+                for row in rows
+            ]
+        }
+
+
+@router.delete("/connections/{connection_id}")
+async def instagram_disconnect(connection_id: str, request: Request):
+    user = await get_current_user_required(request)
+    try:
+        from uuid import UUID
+        parsed_id = UUID(connection_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="Instagram connection not found") from exc
+    async with native_social_session() as session:
+        async with session.begin():
+            result = await session.execute(
+                delete(SocialConnection).where(
+                    SocialConnection.id == parsed_id,
+                    SocialConnection.owner_id == user.id,
+                    SocialConnection.provider == "instagram",
+                ).returning(SocialConnection.id)
+            )
+            if result.scalar_one_or_none() is None:
+                raise HTTPException(status_code=404, detail="Instagram connection not found")
+    # The provider authorization remains revocable from Instagram's app settings;
+    # deleting this row cascades the encrypted local credential immediately.
+    return {"ok": True}

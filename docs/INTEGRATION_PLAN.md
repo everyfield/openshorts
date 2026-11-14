@@ -74,7 +74,7 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 
 ## Current limitations
 
-This branch now includes provider-neutral runtime contracts, state-transition/retry helpers, isolated native-social tables, owner-scoped credential persistence, and KMS-backed credential encryption. Concrete provider adapters, OAuth routes, token refresh/revocation, durable scheduling/worker recovery, and native dashboard workflows remain unimplemented. Tests have not been executed in a real checkout; no PostgreSQL integration, backend/frontend suite, or live provider test has been run. Permission management and evidence storage are intentionally deferred.
+This branch now includes provider-neutral runtime contracts, state-transition/retry helpers, isolated native-social tables, owner-scoped credential persistence, and KMS-backed credential encryption. Instagram OAuth routes, token persistence wiring, durable scheduling/worker recovery, and native dashboard workflows remain unimplemented. YouTube and TikTok are explicitly deferred. Tests have not been executed in a real checkout; no PostgreSQL integration, backend/frontend suite, or live provider test has been run. Permission management and evidence storage are intentionally deferred.
 
 
 ## Native persistence implementation update (2026-11-15)
@@ -96,7 +96,7 @@ Not implemented yet:
 
 ## YouTube API transport implementation update (2026-11-15)
 
-Added `native_social/youtube.py` using the official YouTube Data API v3 endpoints:
+YouTube provider work is deferred and is not part of the active implementation scope. Earlier YouTube transport code was removed from this branch.
 - Server-side refresh-token exchange at Google's OAuth token endpoint.
 - Authenticated `channels.list(mine=true)` account validation.
 - `videos.insert` resumable upload using 8 MiB chunks and upload-session status reconciliation after transport/5xx failures.

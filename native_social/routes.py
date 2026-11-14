@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
 
@@ -53,7 +54,7 @@ async def instagram_connect(request: Request):
         raise HTTPException(status_code=503, detail="Instagram OAuth is not configured") from exc
     finally:
         await api.aclose()
-    return RedirectResponse(url=url, status_code=302)
+    return JSONResponse({"authorization_url": url})
 
 
 @router.get("/callback")

@@ -62,7 +62,7 @@ See [NATIVE_PUBLISHING_ARCHITECTURE.md](./NATIVE_PUBLISHING_ARCHITECTURE.md).
 - [x] Identify the persistence/migration licensing boundary and document the native publishing data model.
 - [x] Implement isolated native-social SQLAlchemy metadata/bootstrap and owner-scoped connection/credential repository without importing `cloud/`.
 - [x] Add KMS-backed AES-256-GCM envelope encryption with tenant/provider-bound authenticated context and no plaintext fallback.
-- [ ] Add a versioned native-social migration runner and PostgreSQL repository integration tests.
+- [x] Add a versioned native-social migration runner with a PostgreSQL advisory lock; PostgreSQL integration tests remain pending.
 - [x] Add a provider-neutral Python protocol, typed request/result models, and state-transition/retry unit tests; provider HTTP mock tests remain pending.
 - [ ] Implement and test YouTube native publishing.
 - [ ] Implement and test Instagram native publishing.

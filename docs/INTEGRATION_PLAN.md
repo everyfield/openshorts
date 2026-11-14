@@ -52,3 +52,8 @@ The first migration is additive and isolated under `database/migrations/`. It in
 ## Current limitations
 
 This commit is a safe foundation, not a completed platform. The schema is not yet wired to the running application, the policy module is not yet called by existing publish routes, and no provider credentials or live social accounts have been tested. The current OpenShorts application must not be described as having permission enforcement until those wiring and tests are complete.
+
+
+## Existing publish-path audit (2026-11-15)
+
+See [PUBLISH_PATH_AUDIT.md](./PUBLISH_PATH_AUDIT.md). The confirmed direct entry point is `POST /api/social/post` in `app.py`; it submits clips to Upload-Post and currently has no creator-permission check. Scheduled posts use the same handler. Completed-job autopilot delegates to `cloud.autopilot.on_job_finished` and requires a separate audit. The new policy/schema are not wired into either path.

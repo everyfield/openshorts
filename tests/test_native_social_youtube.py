@@ -23,6 +23,7 @@ def test_refresh_access_token_uses_server_side_oauth_credentials():
             "access_token": "new-access", "expires_in": 3600,
         }
         await api.aclose()
+        await client.aclose()
     asyncio.run(run())
 
 

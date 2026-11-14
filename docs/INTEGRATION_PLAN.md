@@ -121,7 +121,7 @@ Added `native_social/instagram.py`:
 - Public HTTPS media URL validation; localhost and private/reserved IP literals are rejected.
 - Mock tests for OAuth, account validation, Reels container creation/status, publish, URL validation, and token-safe error messages.
 
-This is an API transport foundation only. Authenticated OAuth start/callback, DB-backed single-use state validation, professional-account verification, and KMS-encrypted token persistence are now implemented. Remaining work: connect generated clips to stable public HTTPS media storage, durable create/poll/publish orchestration with duplicate-publish reconciliation, connection management/disconnect/refresh lifecycle, dashboard UI, PostgreSQL integration tests, and a provider-approved live test. The routes are registered only in hosted billing mode. The callback redirects to the application root with a fixed status query; frontend status handling is not yet implemented. Instagram supports professional Business/Creator accounts, not personal consumer accounts. Meta's official collection documents the Instagram Login permissions and the container → status → publish workflow.
+This is an API transport foundation only. Authenticated OAuth start/callback, DB-backed single-use state validation, professional-account verification, and KMS-encrypted token persistence are now implemented. Remaining work: connect generated clips to stable public HTTPS media storage, durable create/poll/publish orchestration with duplicate-publish reconciliation, token refresh lifecycle, PostgreSQL integration tests, and a provider-approved live test. The routes are registered only in hosted billing mode. The callback redirects to the application root with a fixed status query; frontend status handling is not yet implemented. Instagram supports professional Business/Creator accounts, not personal consumer accounts. Meta's official collection documents the Instagram Login permissions and the container → status → publish workflow.
 
 
 ### Instagram OAuth route implementation update (2026-11-15)
@@ -135,3 +135,13 @@ Implemented on the feature branch:
 - Added focused tests for state hashing and fixed redirect behavior. These tests have not been executed in a real checkout.
 
 Remaining: stable public HTTPS media delivery, durable Reel container/publish worker with duplicate-publish reconciliation, refresh/disconnect lifecycle, dashboard integration, PostgreSQL integration tests, and Meta-approved live account validation/publication. Set `INSTAGRAM_REDIRECT_URI` to the exact callback URL `https://<your-api-host>/api/native-social/instagram/callback`. Hosted runtime also requires `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `NATIVE_SOCIAL_KMS_KEY_ID`, and the app role's KMS permissions.
+
+
+### Instagram account dashboard update (2026-11-15)
+
+- Added an authenticated settings card for native Instagram Business/Creator accounts.
+- The dashboard requests the OAuth URL through the authenticated API client (so the stored bearer session is sent); it does not navigate directly to an endpoint that would lose the Authorization header.
+- Added owner-scoped connection listing and disconnect endpoints. Disconnect deletes the connection row and its encrypted credential through the database foreign-key cascade; the user is informed that app access can also be revoked in Instagram settings.
+- OAuth callback now returns to the dashboard Settings tab and reports a non-sensitive success/error status.
+- The account card is explicitly labeled as native publishing in progress. It does not claim Reels publishing is already wired to generated clips.
+- Frontend build, browser OAuth round-trip, PostgreSQL cascade behavior, and live Instagram tests remain unexecuted.

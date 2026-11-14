@@ -107,3 +107,18 @@ Added `native_social/youtube.py` using the official YouTube Data API v3 endpoint
 - Mock HTTP tests cover refresh, account validation, resumable chunk transfer, private-only gate, and status mapping.
 
 The transport client is not yet wired to OAuth start/callback routes, the encrypted credential repository, or the existing clip-job media resolver. Do not treat YouTube publishing as end-to-end available yet. The tests have not been run in a real checkout.
+
+
+## Instagram-only implementation update (2026-11-15)
+
+The current provider implementation scope is Instagram only. YouTube and TikTok are not part of the active delivery scope.
+
+Added `native_social/instagram.py`:
+- Instagram Login OAuth authorization URL with least-privilege scopes: `instagram_business_basic` and `instagram_business_content_publish`.
+- Authorization-code exchange, long-lived token exchange, and long-lived token refresh.
+- Professional account identity validation.
+- Reels container creation, processing-status polling, and the separate publish call.
+- Public HTTPS media URL validation; localhost and private/reserved IP literals are rejected.
+- Mock tests for OAuth, account validation, Reels container creation/status, publish, URL validation, and token-safe error messages.
+
+This is an API transport foundation only. OAuth state storage/CSRF validation, callback routes, encrypted token persistence wiring, job/media URL integration, durable publication state, and dashboard UI remain pending. Instagram supports professional Business/Creator accounts, not personal consumer accounts. Meta's official collection documents the Instagram Login permissions and the container → status → publish workflow.

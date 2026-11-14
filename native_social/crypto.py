@@ -88,7 +88,7 @@ class KMSCredentialCipher:
                 encrypted_data_key=response["CiphertextBlob"],
                 nonce=nonce,
                 ciphertext=ciphertext,
-                kms_key_id=self._key_id,
+                kms_key_id=response.get("KeyId") or self._key_id,
             )
         except CredentialEncryptionError:
             raise

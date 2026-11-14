@@ -34,6 +34,10 @@ class PublishDecision:
     reason: str
 
 
+def _aware(value: datetime | None) -> bool:
+    return value is not None and value.tzinfo is not None and value.utcoffset() is not None
+
+
 def evaluate_publish_permission(
     permission: Permission | None,
     platform: str,
@@ -49,20 +53,24 @@ def evaluate_publish_permission(
         return PublishDecision(False, "permission_state_invalid")
     if permission.status != "APPROVED":
         return PublishDecision(False, f"permission_not_approved:{permission.status.lower()}")
-    if permission.approved_at is None:
-        return PublishDecision(False, "approval_timestamp_missing")
+    if not _aware(permission.approved_at):
+        return PublishDecision(False, "approval_timestamp_missing_or_invalid")
 
     current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
+    if not _aware(current):
         return PublishDecision(False, "clock_must_be_timezone_aware")
+    if permission.approved_at > current:
+        return PublishDecision(False, "approval_timestamp_in_future")
     if permission.revoked_at is not None:
+        if not _aware(permission.revoked_at):
+            return PublishDecision(False, "revocation_timestamp_invalid")
         return PublishDecision(False, "permission_revoked")
     if permission.expires_at is not None:
-        if permission.expires_at.tzinfo is None:
+        if not _aware(permission.expires_at):
             return PublishDecision(False, "expiry_must_be_timezone_aware")
         if current >= permission.expires_at:
             return PublishDecision(False, "permission_expired")
-    if platform not in permission.allowed_platforms:
+    if not platform or platform not in permission.allowed_platforms:
         return PublishDecision(False, "platform_not_authorized")
     if commercial_use and not permission.commercial_use_allowed:
         return PublishDecision(False, "commercial_use_not_authorized")

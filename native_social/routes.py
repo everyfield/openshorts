@@ -27,7 +27,7 @@ def _state_digest(value: str) -> str:
 
 def _dashboard_redirect(result: str) -> RedirectResponse:
     # Fixed same-origin relative destination; no user-controlled redirect target.
-    return RedirectResponse(url=f"/?instagram_connect={result}", status_code=303)
+    return RedirectResponse(url=f"/?instagram_connect={result}#app?tab=settings", status_code=303)
 
 
 @router.get("/connect")

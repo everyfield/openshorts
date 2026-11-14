@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .crypto import EncryptedCredentials, KMSCredentialCipher
-from .models import Base, SocialConnection, SocialCredential
+from .models import SocialConnection, SocialCredential
+from .migrations import apply_native_social_migrations
 
 _engine = None
 _sessions = None
@@ -27,7 +28,7 @@ async def init_native_social_database(database_url: str | None = None) -> None:
     _engine = create_async_engine(url, pool_pre_ping=True)
     _sessions = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
     async with _engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+        await apply_native_social_migrations(connection)
 
 
 def native_social_session() -> AsyncSession:

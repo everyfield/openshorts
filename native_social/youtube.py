@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -113,6 +114,8 @@ class YouTubeDataAPI:
         size = path.stat().st_size
         if size <= 0:
             raise YouTubeAPIError("Rendered media file is empty")
+        if size > 256 * 1024 * 1024 * 1024:
+            raise YouTubeAPIError("Video exceeds YouTube Data API 256 GB upload limit")
         if privacy_status not in {"private", "unlisted", "public"}:
             raise ValueError("Invalid YouTube privacy status")
         if privacy_status != "private" and not self.public_posting_approved:
@@ -120,11 +123,12 @@ class YouTubeDataAPI:
                 "Public/unlisted upload is disabled until this API client passes YouTube audit"
             )
 
+        clean_tags = _normalize_tags(tags or [])
         metadata = {
             "snippet": {
                 "title": title[:100],
                 "description": description[:5000],
-                "tags": (tags or [])[:500],
+                "tags": clean_tags,
                 "categoryId": category_id,
             },
             "status": {"privacyStatus": privacy_status},
@@ -152,7 +156,8 @@ class YouTubeDataAPI:
                 reason=_error_reason(init),
             )
         upload_url = init.headers.get("Location")
-        if not upload_url or not upload_url.startswith("https://"):
+        parsed_upload_url = urlsplit(upload_url or "")
+        if parsed_upload_url.scheme != "https" or parsed_upload_url.hostname != "www.googleapis.com":
             raise YouTubeAPIError("YouTube did not return a valid resumable upload URL")
 
         try:
@@ -173,6 +178,7 @@ class YouTubeDataAPI:
     ) -> str:
         offset = 0
         reconciliations = 0
+        no_progress = 0
         with path.open("rb") as media:
             while offset < size:
                 media.seek(offset)
@@ -193,11 +199,15 @@ class YouTubeDataAPI:
                     reconciliations += 1
                     if reconciliations > 5:
                         raise AmbiguousYouTubeUpload("YouTube upload could not be reconciled")
+                    previous_offset = offset
                     offset, completed_id = await self._query_upload(
                         access_token=access_token, upload_url=upload_url, size=size,
                     )
                     if completed_id:
                         return completed_id
+                    no_progress = no_progress + 1 if offset <= previous_offset else 0
+                    if no_progress > 3:
+                        raise AmbiguousYouTubeUpload("YouTube upload made no resumable progress")
                     continue
 
                 if response.status_code in (200, 201):
@@ -206,25 +216,38 @@ class YouTubeDataAPI:
                         raise AmbiguousYouTubeUpload("YouTube completed upload without returning a video ID")
                     return video_id
                 if response.status_code == 308:
-                    offset = _next_offset(response, size)
-                    if offset > size:
+                    next_offset = _next_offset(response, size)
+                    if next_offset > size:
                         raise AmbiguousYouTubeUpload("YouTube returned an invalid upload offset")
+                    no_progress = no_progress + 1 if next_offset <= offset else 0
+                    if no_progress > 3:
+                        raise AmbiguousYouTubeUpload("YouTube upload made no resumable progress")
+                    offset = next_offset
                     continue
                 if response.status_code >= 500:
                     reconciliations += 1
                     if reconciliations > 5:
                         raise AmbiguousYouTubeUpload("YouTube upload repeatedly failed during transfer")
+                    previous_offset = offset
                     offset, completed_id = await self._query_upload(
                         access_token=access_token, upload_url=upload_url, size=size,
                     )
                     if completed_id:
                         return completed_id
+                    no_progress = no_progress + 1 if offset <= previous_offset else 0
+                    if no_progress > 3:
+                        raise AmbiguousYouTubeUpload("YouTube upload made no resumable progress")
                     continue
                 raise YouTubeAPIError(
                     "YouTube rejected an upload chunk",
                     status_code=response.status_code,
                     reason=_error_reason(response),
                 )
+        _, completed_id = await self._query_upload(
+            access_token=access_token, upload_url=upload_url, size=size,
+        )
+        if completed_id:
+            return completed_id
         raise AmbiguousYouTubeUpload("Upload ended without a final YouTube video ID")
 
     async def _query_upload(
@@ -314,3 +337,12 @@ def _error_reason(response: httpx.Response) -> str | None:
         return str(payload.get("error", {}).get("status") or "")[:100] or None
     except Exception:
         return None
+
+
+def _normalize_tags(tags: list[str]) -> list[str]:
+    if any(not isinstance(tag, str) for tag in tags):
+        raise ValueError("YouTube tags must be strings")
+    cleaned = [tag.strip() for tag in tags if tag.strip()]
+    if sum(len(tag) for tag in cleaned) + max(0, len(cleaned) - 1) > 500:
+        raise ValueError("Combined YouTube tag length exceeds 500 characters")
+    return cleaned

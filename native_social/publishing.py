@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 import httpx
 
-from .crypto import KMSCredentialCipher
+from .crypto import get_credential_cipher
 from .instagram import InstagramAPI, InstagramAPIError, _validate_public_media_url
 from .models import PublishJob, PublishTarget, SocialConnection
 from .persistence import load_connection_credentials, native_social_session
@@ -120,7 +120,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 raise LookupError("Instagram connection not found")
             credentials = await load_connection_credentials(
                 session, owner_id=owner_id, connection_id=connection.id,
-                cipher=KMSCredentialCipher(),
+                cipher=get_credential_cipher(),
             )
             access_token = credentials["access_token"]
             if not access_token:

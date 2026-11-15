@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+from uuid import UUID
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
@@ -17,6 +19,9 @@ from native_social.crypto import KMSCredentialCipher
 from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection
 from native_social.persistence import native_social_session, store_connection_credentials
+from native_social.publishing import (
+    create_instagram_publish_job, get_publish_job, process_instagram_publish_job,
+)
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
 STATE_TTL_MINUTES = 10
@@ -165,3 +170,51 @@ async def instagram_disconnect(connection_id: str, request: Request):
     # The provider authorization remains revocable from Instagram's app settings;
     # deleting this row cascades the encrypted local credential immediately.
     return {"ok": True}
+
+
+
+class InstagramPublishBody(BaseModel):
+    connection_id: UUID
+    media_url: str = Field(min_length=1, max_length=4096)
+    caption: str = Field(default="", max_length=2200)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/publish")
+async def instagram_publish(body: InstagramPublishBody, request: Request):
+    """Queue and advance one Instagram Reel publish request for the signed-in owner."""
+    user = await get_current_user_required(request)
+    try:
+        owner_id = UUID(str(user.id))
+        job = await create_instagram_publish_job(
+            owner_id=owner_id,
+            connection_id=body.connection_id,
+            media_url=body.media_url,
+            caption=body.caption,
+            idempotency_key=body.idempotency_key,
+        )
+        # Idempotent replay returns the existing job; only queued jobs are advanced.
+        if job["status"] == "queued":
+            job = await process_instagram_publish_job(
+                owner_id=owner_id, job_id=UUID(job["job_id"]),
+            )
+        return job
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Instagram publishing is not configured") from exc
+
+
+@router.get("/publishes/{job_id}")
+async def instagram_publish_status(job_id: str, request: Request):
+    user = await get_current_user_required(request)
+    try:
+        parsed_id = UUID(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Publish job not found") from exc
+    try:
+        return await get_publish_job(owner_id=UUID(str(user.id)), job_id=parsed_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Publish job not found") from exc

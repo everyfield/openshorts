@@ -20,7 +20,8 @@ from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection
 from native_social.persistence import native_social_session, store_connection_credentials
 from native_social.publishing import (
-    create_instagram_publish_job, get_publish_job, list_instagram_publish_jobs,\n    reconcile_instagram_publish_job,
+    create_instagram_publish_job, get_publish_job, list_instagram_publish_jobs,
+    reconcile_instagram_publish_job,
 )
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])

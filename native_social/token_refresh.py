@@ -60,7 +60,7 @@ async def refresh_due_instagram_tokens(*, limit: int = 20) -> dict[str, int]:
                     SocialConnection.provider == "instagram",
                     SocialConnection.health.in_(["connected", "refresh_degraded"]),
                     SocialCredential.expires_at.is_not(None),
-                    SocialCredential.expires_at > now + timedelta(days=1),
+                    SocialCredential.expires_at > now,
                     SocialCredential.expires_at <= now + REFRESH_WINDOW,
                     (
                         SocialCredential.last_refresh_attempt_at.is_(None)

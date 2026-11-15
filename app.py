@@ -4013,6 +4013,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_handover_watch())
     asyncio.create_task(_resume_scan())
     cleanup_task = asyncio.create_task(cleanup_jobs())
+    native_social_worker_task = None
     if BILLING_ENABLED:
         await cloud.setup_async(app, keep_reservation_ids=_resumed_reservation_ids,
                                 live_reservation_ids=_live_reservation_ids,
@@ -4022,7 +4023,12 @@ async def lifespan(app: FastAPI):
         # hosted database URL but never imports cloud models or Alembic's
         # cloud-bound metadata; OAuth tokens are encrypted separately with KMS.
         from native_social.persistence import init_native_social_database
+        from native_social.publishing import (
+            recover_stale_instagram_publish_jobs, run_instagram_publish_worker,
+        )
         await init_native_social_database(_cloud_config.settings.database_url)
+        await recover_stale_instagram_publish_jobs()
+        native_social_worker_task = asyncio.create_task(run_instagram_publish_worker())
         # The jobs resumed above carry the priority of the plan at submit;
         # the DB is up now: owners who paid since go first (one lookup, which
         # never raises: a failure keeps the manifests' priorities).
@@ -4068,7 +4074,10 @@ async def lifespan(app: FastAPI):
         _geoip.start(OUTPUT_DIR, wanted=lambda: bool(_queue_mode.slow_countries())
                      and not _queue_mode.killed())
     yield
-    # Cleanup (optional: cancel worker)
+    if native_social_worker_task is not None:
+        native_social_worker_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await native_social_worker_task
     if BILLING_ENABLED:
         from native_social.persistence import close_native_social_database
         await close_native_social_database()

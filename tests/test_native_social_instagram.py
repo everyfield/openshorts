@@ -81,6 +81,7 @@ def test_reel_container_creation_and_processing_status():
         status = await api.get_container_status(access_token="access", container_id=container)
         assert container == "container-1"
         assert status.status.value == "processing"
+        assert status.provider_status == "FINISHED"
         await api.aclose()
         await client.aclose()
     asyncio.run(run())

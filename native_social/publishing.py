@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 import httpx
 
 from .crypto import KMSCredentialCipher
@@ -126,7 +126,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 raise RuntimeError("Instagram access token unavailable")
             # Persist the processing claim/attempt before making provider requests.
             target.attempt_count += 1
-            target.started_at = target.started_at or _now()
+            target.started_at = _now()
             target.status = "processing"
             job.status = "processing"
             media_url, caption = job.media_reference, job.caption
@@ -275,3 +275,84 @@ async def get_publish_job(*, owner_id: UUID, job_id: UUID) -> dict:
             PublishTarget.provider == "instagram",
         ))
         return _job_result(job, target)
+
+
+
+async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900) -> int:
+    """Requeue interrupted pre-publish work; never retry an ambiguous publish."""
+    cutoff = _now() - timedelta(seconds=stale_after_seconds)
+    async with native_social_session() as session:
+        async with session.begin():
+            stale = select(PublishTarget.publish_job_id).where(
+                PublishTarget.provider == "instagram",
+                PublishTarget.status == "processing",
+                PublishTarget.started_at < cutoff,
+            )
+            result = await session.execute(
+                update(PublishTarget)
+                .where(PublishTarget.publish_job_id.in_(stale))
+                .values(status="queued", error_code="worker_recovered", error_message=None)
+                .returning(PublishTarget.publish_job_id)
+            )
+            recovered_ids = list(result.scalars().all())
+            if recovered_ids:
+                await session.execute(
+                    update(PublishJob).where(PublishJob.id.in_(recovered_ids))
+                    .values(status="queued")
+                )
+            ambiguous = select(PublishTarget.publish_job_id).where(
+                PublishTarget.provider == "instagram",
+                PublishTarget.status == "publishing",
+            )
+            ambiguous_result = await session.execute(
+                update(PublishTarget)
+                .where(PublishTarget.publish_job_id.in_(ambiguous))
+                .values(
+                    status="needs_review",
+                    error_code="publish_outcome_unknown",
+                    error_message="Worker restarted during publish; reconcile in Instagram before retrying.",
+                    completed_at=_now(),
+                )
+                .returning(PublishTarget.publish_job_id)
+            )
+            ambiguous_ids = list(ambiguous_result.scalars().all())
+            if ambiguous_ids:
+                await session.execute(
+                    update(PublishJob).where(PublishJob.id.in_(ambiguous_ids))
+                    .values(status="needs_review")
+                )
+            return len(recovered_ids)
+
+
+async def run_instagram_publish_worker(*, poll_interval_seconds: float = 3.0) -> None:
+    """Poll the durable queue; database state is shared across app instances."""
+    while True:
+        try:
+            async with native_social_session() as session:
+                result = await session.execute(
+                    select(PublishJob.owner_id, PublishJob.id)
+                    .join(PublishTarget, PublishTarget.publish_job_id == PublishJob.id)
+                    .where(
+                        PublishTarget.provider == "instagram",
+                        PublishTarget.status == "queued",
+                    )
+                    .order_by(PublishJob.created_at.asc())
+                    .limit(10)
+                )
+                pending = list(result.all())
+            if not pending:
+                await asyncio.sleep(poll_interval_seconds)
+                continue
+            for owner_id, job_id in pending:
+                try:
+                    await process_instagram_publish_job(owner_id=owner_id, job_id=job_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    # Keep the worker alive; the persisted target state remains
+                    # available for later reconciliation/recovery.
+                    await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            await asyncio.sleep(poll_interval_seconds)

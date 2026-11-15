@@ -8,6 +8,7 @@ import pytest
 from native_social.local_media import (
     LocalMediaError,
     create_signed_local_media_url,
+    list_local_media_files,
     resolve_local_media_path,
     resolve_signed_media_token,
 )
@@ -68,3 +69,10 @@ def test_public_base_must_be_https(local_media_env, monkeypatch):
 def test_missing_media_is_rejected(local_media_env):
     with pytest.raises(LocalMediaError):
         resolve_local_media_path("job-1/missing.mp4")
+
+
+def test_local_media_listing_returns_only_confined_mp4_files(local_media_env):
+    (local_media_env / "job-1" / "metadata.json").write_text("{}", encoding="utf-8")
+    (local_media_env / "job-1" / "temp.mov").write_bytes(b"not mp4")
+    rows = list_local_media_files()
+    assert [relative for relative, _path in rows] == ["job-1/clip.mp4"]

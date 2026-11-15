@@ -1,0 +1,156 @@
+"""Local-disk media delivery for Instagram's remote media fetcher.
+
+Media stays on the self-hosted machine. Instagram receives a short-lived,
+HMAC-signed HTTPS URL that streams the file directly from this application.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+from pathlib import Path
+from urllib.parse import urlsplit
+
+
+class LocalMediaError(RuntimeError):
+    pass
+
+
+def _key() -> bytes:
+    raw = os.environ.get("NATIVE_SOCIAL_MEDIA_SIGNING_KEY", "").strip()
+    if not raw:
+        raise LocalMediaError("NATIVE_SOCIAL_MEDIA_SIGNING_KEY is required")
+    try:
+        key = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+    except Exception as exc:
+        raise LocalMediaError("Media signing key must be URL-safe base64") from exc
+    if len(key) < 32:
+        raise LocalMediaError("Media signing key must decode to at least 32 bytes")
+    return key
+
+
+def _root() -> Path:
+    root = Path(os.environ.get("NATIVE_SOCIAL_MEDIA_DIR", "output")).expanduser()
+    return root.resolve()
+
+
+def resolve_local_media_path(relative_path: str) -> Path:
+    if (not relative_path or len(relative_path) > 1024 or "\x00" in relative_path
+            or "\\" in relative_path):
+        raise LocalMediaError("Invalid local media path")
+    candidate = Path(relative_path)
+    if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+        raise LocalMediaError("Media path must be a normalized relative path")
+    root = _root()
+    try:
+        resolved = (root / candidate).resolve(strict=True)
+        resolved.relative_to(root)
+    except FileNotFoundError as exc:
+        raise LocalMediaError("Local media file does not exist") from exc
+    except ValueError as exc:
+        raise LocalMediaError("Media path escapes the local media directory") from exc
+    except OSError as exc:
+        raise LocalMediaError("Local media file cannot be accessed") from exc
+    if not resolved.is_file():
+        raise LocalMediaError("Local media file does not exist")
+    return resolved
+
+
+
+def list_local_media_files(*, limit: int = 100) -> list[tuple[str, Path]]:
+    """List canonical generated clips plus standalone MP4s in local media storage."""
+    root = _root()
+    if not root.exists():
+        return []
+    found: dict[str, Path] = {}
+    metadata_dirs: set[Path] = set()
+
+    # For generated jobs, use metadata's clip count and resolve the latest
+    # captioned/recut/hooked/watermarked version, never the original source MP4.
+    for metadata_path in root.rglob("*_metadata.json"):
+        metadata_dirs.add(metadata_path.parent.resolve())
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            shorts = payload.get("shorts", []) if isinstance(payload, dict) else []
+            if not isinstance(shorts, list):
+                continue
+            base_name = metadata_path.name.removesuffix("_metadata.json")
+            for index in range(len(shorts)):
+                clean = f"{base_name}_clip_{index + 1}.mp4"
+                candidates = [metadata_path.parent / clean]
+                patterns = (
+                    f"subtitled_*_{clean}",
+                    f"recut_*_{clean}",
+                    f"hooked_*_{clean}",
+                    f"hook_{clean}",
+                    f"wm_*{clean}",
+                )
+                for pattern in patterns:
+                    candidates.extend(metadata_path.parent.glob(pattern))
+                existing = [path for path in candidates if path.is_file()]
+                if not existing:
+                    continue
+                selected = max(existing, key=lambda path: path.stat().st_mtime)
+                relative = selected.resolve(strict=True).relative_to(root).as_posix()
+                found[relative] = resolve_local_media_path(relative)
+        except (OSError, ValueError, TypeError, LocalMediaError):
+            continue
+
+    # Also allow manually copied MP4 files in folders that are not generated
+    # job folders. Do not accidentally expose original sources from a job.
+    for candidate in root.rglob("*.mp4"):
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        if any(resolved == folder or folder in resolved.parents for folder in metadata_dirs):
+            continue
+        try:
+            relative = resolved.relative_to(root).as_posix()
+            found[relative] = resolve_local_media_path(relative)
+        except (OSError, ValueError, LocalMediaError):
+            continue
+
+    rows = list(found.items())
+    rows.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+    return rows[:max(1, min(limit, 500))]
+
+
+def create_signed_local_media_url(relative_path: str, *, ttl_seconds: int = 1800) -> str:
+    base = os.environ.get("NATIVE_SOCIAL_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    parsed = urlsplit(base)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        raise LocalMediaError("NATIVE_SOCIAL_PUBLIC_BASE_URL must be an HTTPS origin")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise LocalMediaError("Public base URL must be an origin without a path")
+    # Validate before issuing a URL so nonexistent files fail before contacting Meta.
+    resolve_local_media_path(relative_path)
+    expiry = int(time.time()) + max(60, min(int(ttl_seconds), 3600))
+    encoded_path = base64.urlsafe_b64encode(relative_path.encode("utf-8")).decode("ascii").rstrip("=")
+    payload = f"{encoded_path}.{expiry}"
+    signature = hmac.new(_key(), payload.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{base}/api/native-social/instagram/media/{payload}.{signature}"
+
+
+def resolve_signed_media_token(token: str) -> Path:
+    if not token or len(token) > 4096:
+        raise LocalMediaError("Invalid media token")
+    try:
+        encoded_path, expiry_text, supplied_signature = token.rsplit(".", 2)
+        expiry = int(expiry_text)
+        payload = f"{encoded_path}.{expiry_text}"
+        expected = hmac.new(_key(), payload.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, supplied_signature):
+            raise LocalMediaError("Invalid media signature")
+        if expiry < int(time.time()):
+            raise LocalMediaError("Media URL has expired")
+        relative_path = base64.urlsafe_b64decode(
+            encoded_path + "=" * (-len(encoded_path) % 4)
+        ).decode("utf-8")
+        return resolve_local_media_path(relative_path)
+    except LocalMediaError:
+        raise
+    except Exception as exc:
+        raise LocalMediaError("Invalid media token") from exc

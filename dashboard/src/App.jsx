@@ -39,6 +39,7 @@ import { JobPollError, pollFailureAction } from './lib/jobPoll';
 // Enhanced "Encryption" using XOR + Base64 with a Salt
 // This is better than plain Base64 but still client-side.
 const SECRET_KEY = import.meta.env.VITE_ENCRYPTION_KEY || "OpenShorts-Static-Salt-Change-Me";
+const nativeSocialEnabled = import.meta.env.VITE_NATIVE_SOCIAL_ENABLED === '1';
 const ENCRYPTION_PREFIX = "ENC:";
 
 const encrypt = (text) => {
@@ -1745,7 +1746,7 @@ function App() {
                   <Shield size={12} className="text-ok shrink-0" /> Privacy: keys only live in your browser (sent to backend just to process)
                 </div>
               </div>
-              {billingEnabled && isSignedIn && <InstagramConnectionsCard />}
+              {((billingEnabled && isSignedIn) || nativeSocialEnabled) && <InstagramConnectionsCard />}
               {/* Self-hosted installs have no account page, so the agent
                   how-to lives here; cloud users get it (with OAuth) in Account. */}
               {!billingEnabled && <div className="mb-6"><McpConnectCard cloud={false} /></div>}

@@ -23,6 +23,8 @@ COPY . .
 # (Coolify: add it as a build variable on the frontend service). Empty = same-origin.
 ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_NATIVE_SOCIAL_ENABLED="0"
+ENV VITE_NATIVE_SOCIAL_ENABLED=$VITE_NATIVE_SOCIAL_ENABLED
 # Optional product analytics (OpenPanel). Left empty, index.html initialises
 # nothing and the build phones home to nobody — see the comment there.
 ARG VITE_OPENPANEL_API_URL=""

@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .crypto import EncryptedCredentials, KMSCredentialCipher
+from .crypto import CredentialCipher, EncryptedCredentials
 from .models import SocialConnection, SocialCredential
 from .migrations import apply_native_social_migrations
 
@@ -18,7 +18,7 @@ _sessions = None
 
 
 async def init_native_social_database(database_url: str | None = None) -> None:
-    """Initialize only native_social tables on the hosted PostgreSQL database."""
+    """Initialize only native_social tables on the configured local or hosted PostgreSQL database."""
     global _engine, _sessions
     if _engine is not None:
         return
@@ -41,7 +41,7 @@ async def store_connection_credentials(
     session: AsyncSession, *, owner_id: UUID, connection_id: UUID,
     provider: str, provider_account_id: str, display_name: str,
     scopes: list[str], tokens: Mapping[str, str],
-    cipher: KMSCredentialCipher, expires_at: datetime | None = None,
+    cipher: CredentialCipher, expires_at: datetime | None = None,
 ) -> SocialConnection:
     """Upsert account metadata and encrypted credentials within caller transaction."""
     provider = provider.strip().lower()
@@ -98,7 +98,7 @@ async def store_connection_credentials(
 
 async def load_connection_credentials(
     session: AsyncSession, *, owner_id: UUID, connection_id: UUID,
-    cipher: KMSCredentialCipher,
+    cipher: CredentialCipher,
 ) -> dict[str, str | None]:
     """Load/decrypt only when both the connection and credential belong to owner."""
     result = await session.execute(select(SocialConnection).where(

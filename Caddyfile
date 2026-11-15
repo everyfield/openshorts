@@ -1,0 +1,33 @@
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Meta needs unauthenticated access only to the OAuth callback and
+    # short-lived HMAC-signed local media URLs.
+    @meta_public path /api/native-social/instagram/callback /api/native-social/instagram/media/*
+    handle @meta_public {
+        reverse_proxy backend:8000
+    }
+
+    # The renderer is local too; keep it behind the same installation auth.
+    handle /render* {
+        basic_auth {
+            {$AUTH_USER} {$AUTH_PASSWORD_HASH}
+        }
+        reverse_proxy renderer:3100
+    }
+
+    # Protect the dashboard and private backend routes with installation
+    # credentials. Meta's callback and signed media URL are the only exceptions.
+    handle {
+        basic_auth {
+            {$AUTH_USER} {$AUTH_PASSWORD_HASH}
+        }
+
+        @backend path /api/* /videos/* /health/* /mcp* /docs* /openapi.json /thumbnails/* /gallery* /video*
+        handle @backend {
+            reverse_proxy backend:8000
+        }
+
+        reverse_proxy frontend:80
+    }
+}

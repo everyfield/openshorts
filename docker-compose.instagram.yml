@@ -1,0 +1,101 @@
+services:
+  backend:
+    build: .
+    env_file:
+      - .env
+    container_name: openshorts-backend
+    expose:
+      - "8000"
+    environment:
+      BILLING_ENABLED: "0"
+      NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-1}
+      NATIVE_SOCIAL_ENCRYPTION_MODE: ${NATIVE_SOCIAL_ENCRYPTION_MODE:-local}
+      NATIVE_SOCIAL_ENCRYPTION_KEY: ${NATIVE_SOCIAL_ENCRYPTION_KEY:?Set NATIVE_SOCIAL_ENCRYPTION_KEY in .env}
+      NATIVE_SOCIAL_MEDIA_SIGNING_KEY: ${NATIVE_SOCIAL_MEDIA_SIGNING_KEY:?Set NATIVE_SOCIAL_MEDIA_SIGNING_KEY in .env}
+      NATIVE_SOCIAL_MEDIA_DIR: /app/output
+      NATIVE_SOCIAL_PUBLIC_BASE_URL: ${NATIVE_SOCIAL_PUBLIC_BASE_URL:?Set NATIVE_SOCIAL_PUBLIC_BASE_URL in .env}
+      NATIVE_SOCIAL_FRONTEND_URL: ${NATIVE_SOCIAL_FRONTEND_URL:?Set NATIVE_SOCIAL_FRONTEND_URL in .env}
+      NATIVE_SOCIAL_LOCAL_OWNER_ID: ${NATIVE_SOCIAL_LOCAL_OWNER_ID:-a56c2b0c-6c6d-5a2e-8c7e-8a2a4f4f3d31}
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:?Set INSTAGRAM_APP_ID in .env}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:?Set INSTAGRAM_APP_SECRET in .env}
+      INSTAGRAM_REDIRECT_URI: ${INSTAGRAM_REDIRECT_URI:?Set INSTAGRAM_REDIRECT_URI in .env}
+      INSTAGRAM_API_VERSION: ${INSTAGRAM_API_VERSION:-v25.0}
+      DATABASE_URL: postgresql+asyncpg://openshorts:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/openshorts
+    volumes:
+      - ./output:/app/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: openshorts-postgres
+    environment:
+      POSTGRES_DB: openshorts
+      POSTGRES_USER: openshorts
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - openshorts_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openshorts -d openshorts"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./dashboard
+      target: prod
+      args:
+        VITE_NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-1}
+    container_name: openshorts-frontend
+    expose:
+      - "80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: openshorts-caddy
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      AUTH_USER: ${AUTH_USER:?Set AUTH_USER in .env}
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:?Set AUTH_PASSWORD_HASH in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - openshorts_caddy_data:/data
+      - openshorts_caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+      - renderer
+    restart: unless-stopped
+
+  renderer:
+    build:
+      context: .
+      dockerfile: render-service/Dockerfile
+    container_name: openshorts-renderer
+    expose:
+      - "3100"
+    volumes:
+      - ./output:/output
+    environment:
+      - REMOTION_BUNDLE_PATH=/app/remotion
+      - OUTPUT_DIR=/output
+      - PORT=3100
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  openshorts_postgres:
+  openshorts_caddy_data:
+  openshorts_caddy_config:

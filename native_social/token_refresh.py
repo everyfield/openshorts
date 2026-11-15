@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 
-from .crypto import KMSCredentialCipher
+from .crypto import get_credential_cipher
 from .instagram import InstagramAPI, InstagramAPIError
 from .models import SocialConnection, SocialCredential
 from .persistence import native_social_session
@@ -100,7 +100,7 @@ async def refresh_due_instagram_tokens(*, limit: int = 20) -> dict[str, int]:
                     kms_key_id=credential.kms_key_id,
                     key_version=credential.key_version,
                 )
-                tokens = KMSCredentialCipher().decrypt(
+                tokens = get_credential_cipher().decrypt(
                     owner_id=owner_id, connection_id=connection_id,
                     provider="instagram", encrypted=encrypted,
                 )
@@ -113,7 +113,7 @@ async def refresh_due_instagram_tokens(*, limit: int = 20) -> dict[str, int]:
             if not new_token or expires_in <= 0:
                 raise InstagramAPIError("Instagram refresh response was incomplete")
             tokens["access_token"] = new_token
-            encrypted_new = KMSCredentialCipher().encrypt(
+            encrypted_new = get_credential_cipher().encrypt(
                 owner_id=owner_id, connection_id=connection_id,
                 provider="instagram", tokens=tokens,
             )

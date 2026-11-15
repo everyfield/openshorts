@@ -43,6 +43,7 @@ class ProviderOperation:
     status: PublishStatus
     provider_post_id: str | None = None
     error_code: str | None = None
+    provider_status: str | None = None
 
 @dataclass(frozen=True, slots=True)
 class PublishResult:

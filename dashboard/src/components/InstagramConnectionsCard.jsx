@@ -17,7 +17,6 @@ export default function InstagramConnectionsCard() {
   const [connections, setConnections] = useState([]);
   const [clips, setClips] = useState([]);
   const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState('');
   const [selectedClip, setSelectedClip] = useState('');
   const [caption, setCaption] = useState('');
@@ -230,38 +229,39 @@ export default function InstagramConnectionsCard() {
             </button>
             {clips.length === 0 && <p className="text-xs text-muted">No archived clips are available. Generate a clip first; it will appear here after it is saved to your library.</p>}
           </div>
-<div className="border-t border-rule pt-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium text-ink">Publishing history</h3>
-              <button type="button" onClick={load} disabled={busy} className="btn-quiet px-2 py-1 text-xs">Refresh</button>
-            </div>
-            {history.length === 0 ? (
-              <p className="text-xs text-muted">No Instagram publishing activity yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {history.map((job) => (
-                  <div key={job.job_id} className="border-t border-rule pt-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs text-ink">{job.account ? '@' + job.account : 'Instagram'} · {job.status.replaceAll('_', ' ')}</p>
-                        <p className="text-xs text-muted">{job.created_at ? new Date(job.created_at).toLocaleString() : ''}</p>
-                        {job.caption && <p className="text-xs text-muted truncate">{job.caption}</p>}
-                        {job.media_id && <p className="text-xs text-muted">Media ID: {job.media_id}</p>}
-                        {job.error_code && <p className="text-xs text-muted">Code: {job.error_code}</p>}
-                      </div>
-                      {job.status === 'needs_review' && (
-                        <button type="button" onClick={() => reconcile(job)} disabled={busy}
-                          className="btn-primary px-2 py-1 text-xs shrink-0">Review</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+>
 
         </div>
       )}
+<div className="border-t border-rule pt-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-ink">Publishing history</h3>
+          <button type="button" onClick={load} disabled={busy} className="btn-quiet px-2 py-1 text-xs">Refresh</button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-xs text-muted">No Instagram publishing activity yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {history.map((job) => (
+              <div key={job.job_id} className="border-t border-rule pt-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-ink">{job.account ? '@' + job.account : 'Instagram'} · {job.status.replaceAll('_', ' ')}</p>
+                    <p className="text-xs text-muted">{job.created_at ? new Date(job.created_at).toLocaleString() : ''}</p>
+                    {job.caption && <p className="text-xs text-muted truncate">{job.caption}</p>}
+                    {job.media_id && <p className="text-xs text-muted">Media ID: {job.media_id}</p>}
+                    {job.error_code && <p className="text-xs text-muted">Code: {job.error_code}</p>}
+                  </div>
+                  {job.status === 'needs_review' && (
+                    <button type="button" onClick={() => reconcile(job)} disabled={busy}
+                      className="btn-primary px-2 py-1 text-xs shrink-0">Review</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        </div
     </section>
   );
 }

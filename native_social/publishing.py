@@ -145,7 +145,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             media_url = cloud_storage.presigned_get(media_key, expires=24 * 3600)
             _validate_public_media_url(media_url)
         except Exception:
-            await _set_target(owner_id, job_id, "failed", error_code="media_storage_unavailable")
+            await _set_target(owner_id, job_id, "failed", error_code="media_storage_unavailable", worker_token=worker_token)
             return await get_publish_job(owner_id=owner_id, job_id=job_id)
         if not container_id:
             container_id = await api.create_reel_container(
@@ -171,7 +171,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 access_token=access_token, container_id=container_id,
             )
             if operation.error_code:
-                await _set_target(owner_id, job_id, "failed", error_code=operation.error_code)
+                await _set_target(owner_id, job_id, "failed", error_code=operation.error_code, worker_token=worker_token)
                 return await get_publish_job(owner_id=owner_id, job_id=job_id)
             if operation.provider_status == "FINISHED":
                 finished = True
@@ -179,16 +179,16 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             if operation.provider_status == "IN_PROGRESS":
                 pass
             elif operation.provider_status == "ERROR":
-                await _set_target(owner_id, job_id, "failed", error_code="container_processing_failed")
+                await _set_target(owner_id, job_id, "failed", error_code="container_processing_failed", worker_token=worker_token)
                 return await get_publish_job(owner_id=owner_id, job_id=job_id)
             else:
-                await _set_target(owner_id, job_id, "needs_review", error_code="unexpected_container_status")
+                await _set_target(owner_id, job_id, "needs_review", error_code="unexpected_container_status", worker_token=worker_token)
                 return await get_publish_job(owner_id=owner_id, job_id=job_id)
             if poll + 1 < max_polls:
                 await asyncio.sleep(poll_seconds)
 
         if not finished:
-            await _set_target(owner_id, job_id, "needs_review", error_code="processing_timeout")
+            await _set_target(owner_id, job_id, "needs_review", error_code="processing_timeout", worker_token=worker_token)
             return await get_publish_job(owner_id=owner_id, job_id=job_id)
 
         # Commit the one-shot publish claim BEFORE the network request. A crash
@@ -222,7 +222,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             )
         except Exception:
             # The request may have reached Meta. Do not retry automatically.
-            await _set_target(owner_id, job_id, "needs_review", error_code="publish_outcome_unknown")
+            await _set_target(owner_id, job_id, "needs_review", error_code="publish_outcome_unknown", worker_token=worker_token)
             return await get_publish_job(owner_id=owner_id, job_id=job_id)
 
         async with native_social_session() as session:
@@ -248,14 +248,14 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
     except httpx.HTTPError:
         # A transport timeout may occur after Meta received the request. For
         # container creation or publishing, never assume that nothing happened.
-        await _set_target(owner_id, job_id, "needs_review", error_code="provider_transport_outcome_unknown")
+        await _set_target(owner_id, job_id, "needs_review", error_code="provider_transport_outcome_unknown", worker_token=worker_token)
         return await get_publish_job(owner_id=owner_id, job_id=job_id)
     except (InstagramAPIError, ValueError):
         current = await get_publish_job(owner_id=owner_id, job_id=job_id)
         if current["status"] in {"publishing", "processing"}:
-            await _set_target(owner_id, job_id, "needs_review", error_code="provider_operation_outcome_unknown")
+            await _set_target(owner_id, job_id, "needs_review", error_code="provider_operation_outcome_unknown", worker_token=worker_token)
         else:
-            await _set_target(owner_id, job_id, "failed", error_code="instagram_api_error")
+            await _set_target(owner_id, job_id, "failed", error_code="instagram_api_error", worker_token=worker_token)
         return await get_publish_job(owner_id=owner_id, job_id=job_id)
     finally:
         heartbeat_task.cancel()
@@ -286,7 +286,7 @@ async def _heartbeat_publish_lease(job_id: UUID, worker_token: str) -> None:
                     return
 
 
-async def _set_target(owner_id: UUID, job_id: UUID, status: str, *, error_code: str | None = None) -> None:
+async def _set_target(owner_id: UUID, job_id: UUID, status: str, *, error_code: str | None = None, worker_token: str | None = None) -> None:
     async with native_social_session() as session:
         async with session.begin():
             job = await session.scalar(select(PublishJob).where(
@@ -299,6 +299,8 @@ async def _set_target(owner_id: UUID, job_id: UUID, status: str, *, error_code: 
                 PublishTarget.provider == "instagram",
             ).with_for_update())
             if target is None:
+                return
+            if worker_token is not None and target.worker_lease_token != worker_token:
                 return
             target.status = status
             target.worker_lease_token = None
@@ -394,14 +396,21 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
     cutoff = _now() - timedelta(seconds=stale_after_seconds)
     async with native_social_session() as session:
         async with session.begin():
-            stale = select(PublishTarget.publish_job_id).where(
+            expired_lease = (
+                (PublishTarget.worker_lease_until < _now())
+                | (PublishTarget.worker_lease_until.is_(None) & (PublishTarget.started_at < cutoff))
+            )
+            # Resume polling only when the container ID was durably saved.
+            # Otherwise Meta may have accepted creation before the worker died.
+            resumable = select(PublishTarget.publish_job_id).where(
                 PublishTarget.provider == "instagram",
                 PublishTarget.status == "processing",
-                ((PublishTarget.worker_lease_until < _now()) | (PublishTarget.worker_lease_until.is_(None) & (PublishTarget.started_at < cutoff))),
+                PublishTarget.provider_operation_id.is_not(None),
+                expired_lease,
             )
             result = await session.execute(
                 update(PublishTarget)
-                .where(PublishTarget.publish_job_id.in_(stale))
+                .where(PublishTarget.publish_job_id.in_(resumable))
                 .values(status="queued", worker_lease_token=None, worker_lease_until=None, error_code="worker_recovered", error_message=None)
                 .returning(PublishTarget.publish_job_id)
             )
@@ -410,6 +419,31 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
                 await session.execute(
                     update(PublishJob).where(PublishJob.id.in_(recovered_ids))
                     .values(status="queued")
+                )
+            ambiguous_container = select(PublishTarget.publish_job_id).where(
+                PublishTarget.provider == "instagram",
+                PublishTarget.status == "processing",
+                PublishTarget.provider_operation_id.is_(None),
+                expired_lease,
+            )
+            ambiguous_result = await session.execute(
+                update(PublishTarget)
+                .where(PublishTarget.publish_job_id.in_(ambiguous_container))
+                .values(
+                    status="needs_review",
+                    worker_lease_token=None,
+                    worker_lease_until=None,
+                    error_code="container_creation_outcome_unknown",
+                    error_message="Worker stopped before saving the container ID; verify Instagram before creating another container.",
+                    completed_at=_now(),
+                )
+                .returning(PublishTarget.publish_job_id)
+            )
+            ambiguous_container_ids = list(ambiguous_result.scalars().all())
+            if ambiguous_container_ids:
+                await session.execute(
+                    update(PublishJob).where(PublishJob.id.in_(ambiguous_container_ids))
+                    .values(status="needs_review")
                 )
             ambiguous = select(PublishTarget.publish_job_id).where(
                 PublishTarget.provider == "instagram",

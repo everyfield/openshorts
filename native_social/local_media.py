@@ -37,8 +37,8 @@ def _root() -> Path:
 
 
 def resolve_local_media_path(relative_path: str) -> Path:
-    if (not relative_path or len(relative_path) > 1024 or "\\x00" in relative_path
-            or "\\\\" in relative_path):
+    if (not relative_path or len(relative_path) > 1024 or "\x00" in relative_path
+            or "\\" in relative_path):
         raise LocalMediaError("Invalid local media path")
     candidate = Path(relative_path)
     if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):

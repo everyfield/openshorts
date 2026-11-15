@@ -20,7 +20,7 @@ from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection
 from native_social.persistence import native_social_session, store_connection_credentials
 from native_social.publishing import (
-    create_instagram_publish_job, get_publish_job,
+    create_instagram_publish_job, get_publish_job, list_instagram_publish_jobs,\n    reconcile_instagram_publish_job,
 )
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
@@ -182,6 +182,11 @@ class InstagramPublishBody(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
 
 
+class InstagramPublishReconcileBody(BaseModel):
+    outcome: str = Field(pattern="^(published|not_published)$")
+    media_id: str | None = Field(default=None, max_length=255)
+
+
 @router.get("/clips")
 async def instagram_publishable_clips(request: Request):
     """Return only the signed-in owner's durable clips archived in R2."""
@@ -236,6 +241,35 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Instagram publishing is not configured") from exc
+
+
+@router.get("/publishes")
+async def instagram_publish_history(request: Request, limit: int = 50):
+    user = await get_current_user_required(request)
+    rows = await list_instagram_publish_jobs(
+        owner_id=UUID(str(user.id)), limit=max(1, min(limit, 100)),
+    )
+    return {"publishes": rows}
+
+
+@router.post("/publishes/{job_id}/reconcile")
+async def instagram_reconcile_publish(
+    job_id: str, body: InstagramPublishReconcileBody, request: Request,
+):
+    user = await get_current_user_required(request)
+    try:
+        parsed_id = UUID(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Publish job not found") from exc
+    try:
+        return await reconcile_instagram_publish_job(
+            owner_id=UUID(str(user.id)), job_id=parsed_id,
+            outcome=body.outcome, media_id=body.media_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Publish job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/publishes/{job_id}")

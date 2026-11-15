@@ -24,9 +24,9 @@ The app and media remain self-hosted, but a public domain and internet access ar
 
    ```bash
    docker run --rm caddy:2.10-alpine caddy hash-password --plaintext 'YOUR_LONG_PASSWORD'
-   Keep the resulting bcrypt hash single-quoted in `.env` because it contains dollar signs.
-
    ```
+
+   Keep the resulting bcrypt hash single-quoted in `.env` because it contains dollar signs.
 
 5. Generate two independent 32-byte keys. Run the command twice and use a different output for each variable:
 

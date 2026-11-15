@@ -17,7 +17,7 @@ from cloud.auth import get_current_user_required
 from cloud.config import settings
 from native_social.crypto import KMSCredentialCipher
 from native_social.instagram import InstagramAPI, InstagramAPIError
-from native_social.models import OAuthState, SocialConnection
+from native_social.models import OAuthState, SocialConnection, SocialCredential
 from native_social.persistence import native_social_session, store_connection_credentials
 from native_social.publishing import (
     create_instagram_publish_job, get_publish_job, list_instagram_publish_jobs,
@@ -161,17 +161,21 @@ async def instagram_disconnect(connection_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Instagram connection not found") from exc
     async with native_social_session() as session:
         async with session.begin():
-            result = await session.execute(
-                delete(SocialConnection).where(
-                    SocialConnection.id == parsed_id,
-                    SocialConnection.owner_id == user.id,
-                    SocialConnection.provider == "instagram",
-                ).returning(SocialConnection.id)
-            )
-            if result.scalar_one_or_none() is None:
+            connection = await session.scalar(select(SocialConnection).where(
+                SocialConnection.id == parsed_id,
+                SocialConnection.owner_id == user.id,
+                SocialConnection.provider == "instagram",
+            ).with_for_update())
+            if connection is None:
                 raise HTTPException(status_code=404, detail="Instagram connection not found")
-    # The provider authorization remains revocable from Instagram's app settings;
-    # deleting this row cascades the encrypted local credential immediately.
+            # Keep the connection row because publish history references it.
+            # Remove the encrypted token immediately while preserving history.
+            connection.health = "disconnected"
+            await session.execute(delete(SocialCredential).where(
+                SocialCredential.connection_id == parsed_id,
+                SocialCredential.owner_id == user.id,
+            ))
+    # Provider authorization remains revocable from Instagram's app settings.
     return {"ok": True}
 
 

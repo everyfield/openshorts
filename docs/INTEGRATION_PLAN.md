@@ -39,7 +39,9 @@ Updated: 2026-11-15
 - `POST /api/native-social/instagram/publishes/{job_id}/reconcile` lets the owner manually record `published` (optional media ID) or `not_published` after checking Instagram. It only accepts `needs_review` jobs and never calls Meta or retries a publish.
 - Publish requests are persisted and return immediately. A hosted-lifespan worker polls the PostgreSQL queue.
 - The worker persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.
-- On startup, jobs left in `processing` for at least 15 minutes are requeued. Jobs interrupted in `publishing` move to `needs_review` and are never automatically resubmitted.
+- Active jobs hold a PostgreSQL worker lease renewed by a 20-second heartbeat (90-second lease). Expired leases are recovered only after expiry, so long-running active work is not requeued just because it exceeded a fixed age.
+- Expired `processing` jobs resume polling only when the Instagram container ID was persisted. If a worker stops after container creation may have reached Meta but before the ID is saved, the job moves to `needs_review` rather than blindly creating another container.
+- Jobs interrupted in `publishing` move to `needs_review` and are never automatically resubmitted. Worker-token checks fence stale workers from overwriting a newer worker's state.
 - Same-key duplicate requests return the existing job; reusing a key with different request data is rejected.
 - Ambiguous transport or publish outcomes are marked `needs_review`; non-idempotent publishing is not blindly retried.
 
@@ -59,11 +61,9 @@ Updated: 2026-11-15
 
 ## Remaining before production
 
-1. Add a worker heartbeat/lease and stronger reconciliation for ambiguous container-creation outcomes. A stale pre-publish retry may leave an unused Meta container, but it will not automatically publish that orphan.
-2. Add persistent publish history and a manual reconciliation path for `needs_review`.
-3. Add token refresh scheduling and mark expired/revoked connections as requiring re-authentication.
-4. Add PostgreSQL repository/migration integration tests and execute backend/frontend test suites.
-5. Complete OAuth and Reels publishing tests with a Meta-approved professional test account.
+1. Add PostgreSQL repository/migration integration tests and execute backend/frontend test suites.
+2. Complete OAuth and Reels publishing tests with a Meta-approved professional test account.
+3. Verify multi-replica worker recovery and lease fencing under process termination and network timeouts.
 
 ## Runtime prerequisites
 

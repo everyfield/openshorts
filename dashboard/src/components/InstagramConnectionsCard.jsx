@@ -2,6 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Instagram, Loader2, Link2, Unlink } from 'lucide-react';
 import { apiJson } from '../lib/api';
 
+function connectionHealthLabel(health) {
+  if (health === 'connected') return 'Connected';
+  if (health === 'refresh_degraded') return 'Token refresh retry scheduled';
+  if (health === 'reauth_required') return 'Reconnect required';
+  return health || 'Unknown';
+}
+
+function isPublishableHealth(health) {
+  return health === 'connected' || health === 'refresh_degraded';
+}
+
 export default function InstagramConnectionsCard() {
   const [connections, setConnections] = useState([]);
   const [clips, setClips] = useState([]);
@@ -18,8 +29,8 @@ export default function InstagramConnectionsCard() {
       const accounts = Array.isArray(data.connections) ? data.connections : [];
       setConnections(accounts);
       setSelectedConnection((current) =>
-        accounts.some((x) => x.id === current && x.health === 'connected')
-          ? current : accounts.find((x) => x.health === 'connected')?.id || '');
+        accounts.some((x) => x.id === current && isPublishableHealth(x.health))
+          ? current : accounts.find((x) => isPublishableHealth(x.health))?.id || '');
       try {
         const library = await apiJson('/api/native-social/instagram/clips');
         const availableClips = Array.isArray(library.clips) ? library.clips : [];
@@ -120,11 +131,11 @@ export default function InstagramConnectionsCard() {
         </h2>
         <button onClick={connect} disabled={busy} className="btn-primary px-3 py-2 text-xs">
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
-          Connect Instagram
+          {connections.some((account) => account.health === 'reauth_required') ? 'Reconnect Instagram' : 'Connect Instagram'}
         </button>
       </div>
       <p className="text-xs text-muted leading-relaxed mb-4">
-        Connect a professional Instagram Business or Creator account. Select an archived clip and publish it as an Instagram Reel. Existing Upload-Post publishing remains separate.
+        Connect a professional Instagram Business or Creator account. Long-lived access tokens are refreshed automatically before expiry. If Meta revokes access or a token expires, reconnect the account. Select an archived clip and publish it as a Reel. Existing Upload-Post publishing remains separate.
       </p>
       {message && <p role="status" className="text-xs text-ink2 mb-3">{message}</p>}
       {loading ? (
@@ -137,7 +148,7 @@ export default function InstagramConnectionsCard() {
             <div key={account.id} className="flex items-center justify-between gap-3 border-t border-rule pt-3">
               <div className="min-w-0">
                 <p className="text-sm text-ink truncate">@{account.username}</p>
-                <p className="text-xs text-muted">{account.health === 'connected' ? 'Connected' : account.health}</p>
+                <p className="text-xs text-muted">{connectionHealthLabel(account.health)}</p>
               </div>
               <button onClick={() => disconnect(account.id)} disabled={busy}
                 className="btn-quiet px-3 py-2 text-xs shrink-0">
@@ -151,7 +162,7 @@ export default function InstagramConnectionsCard() {
               Instagram account
               <select value={selectedConnection} onChange={(e) => setSelectedConnection(e.target.value)}
                 className="mt-1 w-full rounded-input border border-rule bg-paper2 px-3 py-2 text-sm text-ink">
-                {connections.filter((a) => a.health === 'connected').map((account) => (
+                {connections.filter((a) => isPublishableHealth(a.health)).map((account) => (
                   <option key={account.id} value={account.id}>@{account.username}</option>
                 ))}
               </select>

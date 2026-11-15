@@ -82,6 +82,10 @@ async def store_connection_credentials(
         kms_key_id=encrypted.kms_key_id,
         key_version=encrypted.key_version,
         expires_at=expires_at,
+        refresh_lease_until=None,
+        last_refresh_attempt_at=None,
+        last_refreshed_at=None,
+        last_error_code=None,
         scopes=list(scopes),
     )
     if credential is None:

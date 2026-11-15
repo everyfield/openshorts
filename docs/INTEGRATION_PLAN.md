@@ -19,7 +19,7 @@ Updated: 2026-11-15
 - Connect requires the authenticated SaaS user. Owner ID is never accepted from client input.
 - OAuth state is cryptographically random, stored as a SHA-256 digest, expires after 10 minutes, and is consumed atomically once in PostgreSQL.
 - Callback exchanges the authorization code, obtains a long-lived token, validates the professional account, and persists credentials through AWS KMS envelope encryption.
-- Owner-scoped list and disconnect routes; disconnect deletes the local encrypted credential.
+- Owner-scoped list and disconnect routes; disconnect deletes the local encrypted credential and marks the connection disconnected while preserving rows referenced by publish history. Reconnecting the same Instagram account reuses its connection record.
 - Settings UI supports connect, list, disconnect, and clear health states (`connected`, `refresh_degraded`, `reauth_required`). Reconnect uses the existing OAuth flow.
 
 ### Provider API
@@ -47,7 +47,7 @@ Updated: 2026-11-15
 - Connect/disconnect professional Instagram accounts.
 - Load archived clips from the signed-in user's R2 library.
 - Select the Instagram account and clip, edit the caption, submit a Reel, and poll status for up to 135 seconds.
-- Browse the latest 50 publish attempts, inspect status/media ID/error code, and manually reconcile ambiguous `needs_review` jobs. A confirmed `not_published` result is terminal; a new publish request must be created explicitly to avoid accidental duplicate submission.
+- Browse the latest 50 publish attempts, inspect status/media ID/error code, and manually reconcile ambiguous `needs_review` jobs. Disconnecting an account removes its encrypted token but does not delete its historical publish records. A confirmed `not_published` result is terminal; a new publish request must be created explicitly to avoid accidental duplicate submission.
 - Existing Upload-Post and Autopilot remain separate.
 
 ### Credential security

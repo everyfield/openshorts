@@ -14,18 +14,24 @@ export default function InstagramConnectionsCard() {
 
   const load = useCallback(async () => {
     try {
-      const [data, library] = await Promise.all([
-        apiJson('/api/native-social/instagram/connections'),
-        apiJson('/api/native-social/instagram/clips'),
-      ]);
+      const data = await apiJson('/api/native-social/instagram/connections');
       const accounts = Array.isArray(data.connections) ? data.connections : [];
-      const availableClips = Array.isArray(library.clips) ? library.clips : [];
       setConnections(accounts);
-      setClips(availableClips);
-      setSelectedConnection((current) => current || accounts.find((x) => x.health === 'connected')?.id || '');
-      setSelectedClip((current) => current || availableClips[0]?.id || '');
+      setSelectedConnection((current) =>
+        accounts.some((x) => x.id === current && x.health === 'connected')
+          ? current : accounts.find((x) => x.health === 'connected')?.id || '');
+      try {
+        const library = await apiJson('/api/native-social/instagram/clips');
+        const availableClips = Array.isArray(library.clips) ? library.clips : [];
+        setClips(availableClips);
+        setSelectedClip((current) =>
+          availableClips.some((x) => x.id === current) ? current : availableClips[0]?.id || '');
+      } catch (_) {
+        setClips([]);
+      }
     } catch (_) {
       setConnections([]);
+      setClips([]);
     } finally {
       setLoading(false);
     }

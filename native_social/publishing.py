@@ -285,6 +285,70 @@ async def get_publish_job(*, owner_id: UUID, job_id: UUID) -> dict:
         return _job_result(job, target)
 
 
+async def list_instagram_publish_jobs(*, owner_id: UUID, limit: int = 50) -> list[dict]:
+    """Return the authenticated owner's newest Instagram publish history."""
+    async with native_social_session() as session:
+        result = await session.execute(
+            select(PublishJob, PublishTarget, SocialConnection.display_name)
+            .join(PublishTarget, PublishTarget.publish_job_id == PublishJob.id)
+            .join(SocialConnection, SocialConnection.id == PublishTarget.connection_id)
+            .where(PublishJob.owner_id == owner_id, PublishTarget.provider == "instagram")
+            .order_by(PublishJob.created_at.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        rows = result.all()
+        return [{
+            **_job_result(job, target),
+            "caption": job.caption,
+            "clip_title": job.source_job_id or "Archived clip",
+            "account": account_name,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "completed_at": target.completed_at.isoformat() if target.completed_at else None,
+            "error_message": target.error_message,
+        } for job, target, account_name in rows]
+
+
+async def reconcile_instagram_publish_job(
+    *, owner_id: UUID, job_id: UUID, outcome: str, media_id: str | None = None,
+) -> dict:
+    """Record an owner's manual verification; never initiates a provider publish."""
+    if outcome not in {"published", "not_published"}:
+        raise ValueError("Outcome must be published or not_published")
+    if outcome == "published":
+        if not media_id or len(media_id) > 255 or any(ch.isspace() for ch in media_id):
+            raise ValueError("A valid Instagram media ID is required")
+    elif media_id:
+        raise ValueError("Media ID must be omitted when confirming not published")
+
+    async with native_social_session() as session:
+        async with session.begin():
+            job = await session.scalar(select(PublishJob).where(
+                PublishJob.id == job_id, PublishJob.owner_id == owner_id,
+            ).with_for_update())
+            if job is None:
+                raise LookupError("Publish job not found")
+            target = await session.scalar(select(PublishTarget).where(
+                PublishTarget.publish_job_id == job_id,
+                PublishTarget.provider == "instagram",
+            ).with_for_update())
+            if target is None:
+                raise LookupError("Instagram publish target not found")
+            if target.status != "needs_review":
+                raise ValueError("Only jobs requiring review can be reconciled")
+            if outcome == "published":
+                target.provider_post_id = media_id
+                target.status = "published"
+                target.error_code = None
+                target.error_message = "Manually confirmed in Instagram."
+            else:
+                target.status = "not_published"
+                target.error_code = "manually_confirmed_not_published"
+                target.error_message = "Owner confirmed this Reel is not present in Instagram. Create a new publish request if needed."
+            target.completed_at = _now()
+            job.status = target.status
+        return await get_publish_job(owner_id=owner_id, job_id=job_id)
+
+
 
 async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900) -> int:
     """Requeue interrupted pre-publish work; never retry an ambiguous publish."""

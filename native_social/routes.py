@@ -20,7 +20,7 @@ from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection
 from native_social.persistence import native_social_session, store_connection_credentials
 from native_social.publishing import (
-    create_instagram_publish_job, get_publish_job, process_instagram_publish_job,
+    create_instagram_publish_job, get_publish_job,
 )
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
@@ -187,7 +187,6 @@ async def instagram_publishable_clips(request: Request):
     try:
         from cloud.database import session as cloud_session
         from cloud.models import UserVideo
-        from cloud import storage as cloud_storage
         async with cloud_session() as session:
             result = await session.execute(
                 select(UserVideo).where(UserVideo.user_id == user.id)
@@ -229,11 +228,7 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
             caption=body.caption,
             idempotency_key=body.idempotency_key,
         )
-        # Idempotent replay returns the existing job; only queued jobs are advanced.
-        if job["status"] == "queued":
-            job = await process_instagram_publish_job(
-                owner_id=owner_id, job_id=UUID(job["job_id"]),
-            )
+        # The durable worker advances queued jobs outside the HTTP request.
         return job
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

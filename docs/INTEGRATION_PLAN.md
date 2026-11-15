@@ -31,13 +31,13 @@ Updated: 2026-11-15
 ### Durable publish records and API
 - Independent SQLAlchemy metadata and versioned native-social migrations; no dependency on `cloud.models`.
 - `native_publish_jobs` and `native_publish_targets` persist request and per-account outcome.
-- `POST /api/native-social/instagram/publish` accepts:
-  - `connection_id`
-  - `media_url` (public HTTPS video URL)
-  - `caption` (max 2,200 characters)
-  - `idempotency_key` (1–128 characters)
+- `GET /api/native-social/instagram/clips` lists the authenticated user's archived R2 clips. It returns clip IDs and metadata, never signed media URLs.
+- `POST /api/native-social/instagram/publish` accepts `connection_id`, owner-owned `clip_id`, `caption` (max 2,200 characters), and `idempotency_key` (1–128 characters).
+- The server verifies clip ownership against the existing hosted video library, then generates a 24-hour R2 presigned URL server-side. The signed URL is never sent to the dashboard.
 - `GET /api/native-social/instagram/publishes/{job_id}` returns owner-scoped status.
-- The flow persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.
+- Publish requests are persisted and return immediately. A hosted-lifespan worker polls the PostgreSQL queue and advances each job.
+- The worker persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.
+- On startup, jobs left in `processing` for at least 15 minutes are requeued; jobs interrupted in `publishing` are moved to `needs_review` and are never automatically resubmitted.
 - Same-key duplicate requests return the existing job; reusing a key with different request data is rejected.
 - Ambiguous transport or publish outcomes are marked `needs_review`; non-idempotent publishing is not blindly retried.
 

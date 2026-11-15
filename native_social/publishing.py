@@ -128,12 +128,16 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             # Persist the processing claim/attempt before making provider requests.
             target.attempt_count += 1
             target.started_at = _now()
+            worker_token = uuid4().hex
+            target.worker_lease_token = worker_token
+            target.worker_lease_until = _now() + timedelta(seconds=90)
             target.status = "processing"
             job.status = "processing"
             media_key, caption = job.media_reference, job.caption
             account_id = connection.provider_account_id
             container_id = target.provider_operation_id
 
+    heartbeat_task = asyncio.create_task(_heartbeat_publish_lease(job_id, worker_token))
     api = InstagramAPI()
     try:
         try:
@@ -153,8 +157,9 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                     target = await session.scalar(select(PublishTarget).join(
                         PublishJob, PublishTarget.publish_job_id == PublishJob.id
                     ).where(PublishJob.id == job_id, PublishJob.owner_id == owner_id).with_for_update())
-                    if target is None:
-                        raise LookupError("Publish target disappeared")
+                    if target is None or target.worker_lease_token != worker_token:
+                        return await get_publish_job(owner_id=owner_id, job_id=job_id)
+                    target.worker_lease_until = _now() + timedelta(seconds=90)
                     target.provider_operation_id = container_id
                     target.status = "processing"
 
@@ -195,6 +200,8 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 ).where(PublishJob.id == job_id, PublishJob.owner_id == owner_id).with_for_update())
                 if target is None:
                     raise LookupError("Publish target not found")
+                if target.worker_lease_token != worker_token:
+                    return _job_result(await session.get(PublishJob, job_id), target)
                 if target.status == "publishing":
                     target.status = "needs_review"
                     target.error_code = "concurrent_publish_claim"
@@ -203,6 +210,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 if target.status != "processing":
                     return _job_result(await session.get(PublishJob, job_id), target)
                 target.status = "publishing"
+                target.worker_lease_until = _now() + timedelta(seconds=90)
                 target.error_code = None
                 target.error_message = None
                 target.updated_at = _now()
@@ -228,7 +236,11 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 ).with_for_update())
                 if job is None or target is None:
                     raise LookupError("Publish job not found")
+                if target.worker_lease_token != worker_token or target.status != "publishing":
+                    return _job_result(job, target)
                 target.provider_post_id = media_id
+                target.worker_lease_token = None
+                target.worker_lease_until = None
                 target.status = "published"
                 target.completed_at = _now()
                 job.status = "published"
@@ -246,7 +258,32 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             await _set_target(owner_id, job_id, "failed", error_code="instagram_api_error")
         return await get_publish_job(owner_id=owner_id, job_id=job_id)
     finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         await api.aclose()
+
+
+async def _heartbeat_publish_lease(job_id: UUID, worker_token: str) -> None:
+    """Renew a worker lease while a provider operation is in progress."""
+    while True:
+        await asyncio.sleep(20)
+        async with native_social_session() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(PublishTarget)
+                    .where(
+                        PublishTarget.publish_job_id == job_id,
+                        PublishTarget.provider == "instagram",
+                        PublishTarget.worker_lease_token == worker_token,
+                        PublishTarget.status.in_(["processing", "publishing"]),
+                    )
+                    .values(worker_lease_until=_now() + timedelta(seconds=90))
+                )
+                if result.rowcount != 1:
+                    return
 
 
 async def _set_target(owner_id: UUID, job_id: UUID, status: str, *, error_code: str | None = None) -> None:
@@ -264,6 +301,8 @@ async def _set_target(owner_id: UUID, job_id: UUID, status: str, *, error_code: 
             if target is None:
                 return
             target.status = status
+            target.worker_lease_token = None
+            target.worker_lease_until = None
             target.error_code = error_code
             target.error_message = None
             if status in {"published", "failed", "needs_review"}:
@@ -358,12 +397,12 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
             stale = select(PublishTarget.publish_job_id).where(
                 PublishTarget.provider == "instagram",
                 PublishTarget.status == "processing",
-                PublishTarget.started_at < cutoff,
+                ((PublishTarget.worker_lease_until < _now()) | (PublishTarget.worker_lease_until.is_(None) & (PublishTarget.started_at < cutoff))),
             )
             result = await session.execute(
                 update(PublishTarget)
                 .where(PublishTarget.publish_job_id.in_(stale))
-                .values(status="queued", error_code="worker_recovered", error_message=None)
+                .values(status="queued", worker_lease_token=None, worker_lease_until=None, error_code="worker_recovered", error_message=None)
                 .returning(PublishTarget.publish_job_id)
             )
             recovered_ids = list(result.scalars().all())
@@ -384,6 +423,8 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
                     error_code="publish_outcome_unknown",
                     error_message="Worker restarted during publish; reconcile in Instagram before retrying.",
                     completed_at=_now(),
+                    worker_lease_token=None,
+                    worker_lease_until=None,
                 )
                 .returning(PublishTarget.publish_job_id)
             )

@@ -16,9 +16,21 @@ async def _oauth_state_schema(connection: AsyncConnection) -> None:
     await OAuthState.__table__.create(connection, checkfirst=True)
 
 
+async def _token_refresh_lifecycle(connection: AsyncConnection) -> None:
+    """Add refresh leasing and health metadata without rewriting credentials."""
+    await connection.execute(text(
+        "ALTER TABLE native_social_credentials "
+        "ADD COLUMN IF NOT EXISTS refresh_lease_until TIMESTAMPTZ NULL, "
+        "ADD COLUMN IF NOT EXISTS last_refresh_attempt_at TIMESTAMPTZ NULL, "
+        "ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMPTZ NULL, "
+        "ADD COLUMN IF NOT EXISTS last_error_code VARCHAR(64) NULL"
+    ))
+
+
 MIGRATIONS = (
     (1, _initial_schema),
     (2, _oauth_state_schema),
+    (3, _token_refresh_lifecycle),
 )
 
 

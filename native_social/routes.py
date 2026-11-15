@@ -175,9 +175,35 @@ async def instagram_disconnect(connection_id: str, request: Request):
 
 class InstagramPublishBody(BaseModel):
     connection_id: UUID
-    media_url: str = Field(min_length=1, max_length=4096)
+    clip_id: UUID
     caption: str = Field(default="", max_length=2200)
     idempotency_key: str = Field(min_length=1, max_length=128)
+
+
+@router.get("/clips")
+async def instagram_publishable_clips(request: Request):
+    """Return only the signed-in owner's durable clips archived in R2."""
+    user = await get_current_user_required(request)
+    try:
+        from cloud.database import session as cloud_session
+        from cloud.models import UserVideo
+        from cloud import storage as cloud_storage
+        async with cloud_session() as session:
+            result = await session.execute(
+                select(UserVideo).where(UserVideo.user_id == user.id)
+                .order_by(UserVideo.created_at.desc()).limit(100)
+            )
+            rows = result.scalars().all()
+        return {"clips": [{
+            "id": str(row.id),
+            "job_id": row.job_id,
+            "clip_index": row.clip_index,
+            "title": row.title or "Short",
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "media_url": cloud_storage.presigned_get(row.r2_key, expires=24 * 3600),
+        } for row in rows]}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Clip library is temporarily unavailable") from exc
 
 
 @router.post("/publish")
@@ -186,10 +212,21 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
     user = await get_current_user_required(request)
     try:
         owner_id = UUID(str(user.id))
+        from cloud.database import session as cloud_session
+        from cloud.models import UserVideo
+        from cloud import storage as cloud_storage
+        async with cloud_session() as library:
+            clip = await library.scalar(select(UserVideo).where(
+                UserVideo.id == body.clip_id,
+                UserVideo.user_id == user.id,
+            ))
+        if clip is None:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        media_url = cloud_storage.presigned_get(clip.r2_key, expires=24 * 3600)
         job = await create_instagram_publish_job(
             owner_id=owner_id,
             connection_id=body.connection_id,
-            media_url=body.media_url,
+            media_url=media_url,
             caption=body.caption,
             idempotency_key=body.idempotency_key,
         )

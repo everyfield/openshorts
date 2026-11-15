@@ -37,17 +37,22 @@ def _root() -> Path:
 
 
 def resolve_local_media_path(relative_path: str) -> Path:
-    if not relative_path or len(relative_path) > 1024 or "\x00" in relative_path:
+    if (not relative_path or len(relative_path) > 1024 or "\\x00" in relative_path
+            or "\\\\" in relative_path):
         raise LocalMediaError("Invalid local media path")
     candidate = Path(relative_path)
     if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
         raise LocalMediaError("Media path must be a normalized relative path")
     root = _root()
-    resolved = (root / candidate).resolve(strict=True)
     try:
+        resolved = (root / candidate).resolve(strict=True)
         resolved.relative_to(root)
+    except FileNotFoundError as exc:
+        raise LocalMediaError("Local media file does not exist") from exc
     except ValueError as exc:
         raise LocalMediaError("Media path escapes the local media directory") from exc
+    except OSError as exc:
+        raise LocalMediaError("Local media file cannot be accessed") from exc
     if not resolved.is_file():
         raise LocalMediaError("Local media file does not exist")
     return resolved

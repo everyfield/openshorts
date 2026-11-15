@@ -25,12 +25,13 @@ def _now() -> datetime:
 
 
 async def create_instagram_publish_job(
-    *, owner_id: UUID, connection_id: UUID, media_url: str,
+    *, owner_id: UUID, connection_id: UUID, media_key: str,
     caption: str, idempotency_key: str,
 ) -> dict:
-    if not media_url or len(media_url) > 4096:
-        raise ValueError("A valid public HTTPS media URL is required")
-    _validate_public_media_url(media_url)
+    expected_prefix = f"users/{owner_id}/"
+    if (not media_key or len(media_key) > 1024 or not media_key.startswith(expected_prefix)
+            or ".." in media_key or "\\" in media_key):
+        raise ValueError("A valid owner-scoped R2 clip key is required")
     if len(caption) > 2200:
         raise ValueError("Instagram captions must be at most 2,200 characters")
     if not idempotency_key or len(idempotency_key) > 128:
@@ -55,12 +56,12 @@ async def create_instagram_publish_job(
                     PublishTarget.publish_job_id == existing.id,
                     PublishTarget.connection_id == connection_id,
                 ))
-                if (existing.media_reference != media_url or existing.caption != caption
+                if (existing.media_reference != media_key or existing.caption != caption
                         or target is None):
                     raise ValueError("Idempotency key was already used for a different publish request")
                 return _job_result(existing, target)
             job = PublishJob(
-                id=uuid4(), owner_id=owner_id, media_reference=media_url,
+                id=uuid4(), owner_id=owner_id, media_reference=media_key,
                 caption=caption, status="queued", idempotency_key=idempotency_key,
             )
             session.add(job)
@@ -129,12 +130,15 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             target.started_at = _now()
             target.status = "processing"
             job.status = "processing"
-            media_url, caption = job.media_reference, job.caption
+            media_key, caption = job.media_reference, job.caption
             account_id = connection.provider_account_id
             container_id = target.provider_operation_id
 
     api = InstagramAPI()
     try:
+        from cloud import storage as cloud_storage
+        media_url = cloud_storage.presigned_get(media_key, expires=24 * 3600)
+        _validate_public_media_url(media_url)
         if not container_id:
             container_id = await api.create_reel_container(
                 access_token=access_token, account_id=account_id,

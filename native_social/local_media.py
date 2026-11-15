@@ -11,7 +11,7 @@ import hmac
 import os
 import time
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 
 class LocalMediaError(RuntimeError):

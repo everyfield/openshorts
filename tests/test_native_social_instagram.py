@@ -43,6 +43,28 @@ def test_oauth_code_exchange_and_long_lived_token_exchange():
     asyncio.run(run())
 
 
+def test_refresh_long_lived_token_uses_instagram_refresh_grant():
+    async def run():
+        def handler(request):
+            assert request.method == "GET"
+            assert request.url.path.endswith("/refresh_access_token")
+            assert request.url.params["grant_type"] == "ig_refresh_token"
+            assert request.url.params["access_token"] == "old-token"
+            return httpx.Response(200, json={
+                "access_token": "new-token",
+                "token_type": "bearer",
+                "expires_in": 5183944,
+            })
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        api = InstagramAPI(http_client=client)
+        result = await api.refresh_long_lived_token("old-token")
+        assert result["access_token"] == "new-token"
+        assert result["expires_in"] == 5183944
+        await api.aclose()
+        await client.aclose()
+    asyncio.run(run())
+
+
 def test_validate_account_returns_professional_account_identity():
     async def run():
         def handler(request):

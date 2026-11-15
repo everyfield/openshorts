@@ -39,7 +39,7 @@ Updated: 2026-11-15
 - `POST /api/native-social/instagram/publishes/{job_id}/reconcile` lets the owner manually record `published` (optional media ID) or `not_published` after checking Instagram. It only accepts `needs_review` jobs and never calls Meta or retries a publish.
 - Publish requests are persisted and return immediately. A hosted-lifespan worker polls the PostgreSQL queue.
 - The worker persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.
-- Active jobs hold a PostgreSQL worker lease renewed by a 20-second heartbeat (90-second lease). Expired leases are recovered only after expiry, so long-running active work is not requeued just because it exceeded a fixed age.
+- Active jobs hold a PostgreSQL worker lease renewed by a 20-second heartbeat (90-second lease). The worker checks for expired leases every 60 seconds and recovers only expired work, so long-running active jobs are not requeued just because they exceeded a fixed age.
 - Expired `processing` jobs resume polling only when the Instagram container ID was persisted. If a worker stops after container creation may have reached Meta but before the ID is saved, the job moves to `needs_review` rather than blindly creating another container.
 - Jobs interrupted in `publishing` move to `needs_review` and are never automatically resubmitted. Worker-token checks fence stale workers from overwriting a newer worker's state.
 - Same-key duplicate requests return the existing job; reusing a key with different request data is rejected.

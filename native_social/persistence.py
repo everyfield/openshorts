@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .crypto import EncryptedCredentials, KMSCredentialCipher
+from .crypto import CredentialCipher, EncryptedCredentials
 from .models import SocialConnection, SocialCredential
 from .migrations import apply_native_social_migrations
 
@@ -41,7 +41,7 @@ async def store_connection_credentials(
     session: AsyncSession, *, owner_id: UUID, connection_id: UUID,
     provider: str, provider_account_id: str, display_name: str,
     scopes: list[str], tokens: Mapping[str, str],
-    cipher: KMSCredentialCipher, expires_at: datetime | None = None,
+    cipher: CredentialCipher, expires_at: datetime | None = None,
 ) -> SocialConnection:
     """Upsert account metadata and encrypted credentials within caller transaction."""
     provider = provider.strip().lower()

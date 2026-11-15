@@ -18,7 +18,7 @@ _sessions = None
 
 
 async def init_native_social_database(database_url: str | None = None) -> None:
-    """Initialize only native_social tables on the hosted PostgreSQL database."""
+    """Initialize only native_social tables on the configured local or hosted PostgreSQL database."""
     global _engine, _sessions
     if _engine is not None:
         return
@@ -98,7 +98,7 @@ async def store_connection_credentials(
 
 async def load_connection_credentials(
     session: AsyncSession, *, owner_id: UUID, connection_id: UUID,
-    cipher: KMSCredentialCipher,
+    cipher: CredentialCipher,
 ) -> dict[str, str | None]:
     """Load/decrypt only when both the connection and credential belong to owner."""
     result = await session.execute(select(SocialConnection).where(

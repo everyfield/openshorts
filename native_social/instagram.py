@@ -174,6 +174,7 @@ class InstagramAPI:
             operation_id=container_id,
             status=status,
             error_code=status_code if status == PublishStatus.FAILED else None,
+            provider_status=status_code or None,
         )
 
     async def publish_container(

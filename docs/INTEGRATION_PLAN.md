@@ -35,6 +35,8 @@ Updated: 2026-11-15
 - `POST /api/native-social/instagram/publish` accepts `connection_id`, owner-owned `clip_id`, `caption` (max 2,200 characters), and `idempotency_key` (1–128 characters).
 - The server verifies clip ownership against the existing hosted video library and stores only the owner-scoped R2 object key. The worker generates a 24-hour R2 presigned URL immediately before Meta fetches the clip. The signed URL is never stored in the database or sent to the dashboard.
 - `GET /api/native-social/instagram/publishes/{job_id}` returns owner-scoped status.
+- `GET /api/native-social/instagram/publishes?limit=50` returns the signed-in owner’s latest publish history (maximum 100), including account, caption, status, media ID, timestamps, and safe error codes.
+- `POST /api/native-social/instagram/publishes/{job_id}/reconcile` lets the owner manually record `published` (optional media ID) or `not_published` after checking Instagram. It only accepts `needs_review` jobs and never calls Meta or retries a publish.
 - Publish requests are persisted and return immediately. A hosted-lifespan worker polls the PostgreSQL queue.
 - The worker persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.
 - On startup, jobs left in `processing` for at least 15 minutes are requeued. Jobs interrupted in `publishing` move to `needs_review` and are never automatically resubmitted.
@@ -45,6 +47,7 @@ Updated: 2026-11-15
 - Connect/disconnect professional Instagram accounts.
 - Load archived clips from the signed-in user's R2 library.
 - Select the Instagram account and clip, edit the caption, submit a Reel, and poll status for up to 135 seconds.
+- Browse the latest 50 publish attempts, inspect status/media ID/error code, and manually reconcile ambiguous `needs_review` jobs. A confirmed `not_published` result is terminal; a new publish request must be created explicitly to avoid accidental duplicate submission.
 - Existing Upload-Post and Autopilot remain separate.
 
 ### Credential security

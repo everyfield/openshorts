@@ -145,3 +145,24 @@ Remaining: stable public HTTPS media delivery, durable Reel container/publish wo
 - OAuth callback now returns to the configured `FRONTEND_URL` Settings tab and reports a non-sensitive success/error status. The connect endpoint returns an authorization URL as JSON so the dashboard can attach its bearer session before redirecting to Meta.
 - The account card is explicitly labeled as native publishing in progress. It does not claim Reels publishing is already wired to generated clips.
 - Frontend build, browser OAuth round-trip, PostgreSQL cascade behavior, and live Instagram tests remain unexecuted.
+
+
+
+## Instagram Reels publish API update (2026-11-15)
+
+The active scope remains Instagram only. A first server-side publish path has now been added:
+
+- `POST /api/native-social/instagram/publish` accepts an owner-scoped connection ID, a public HTTPS video URL, caption, and caller-supplied idempotency key. Owner identity always comes from the authenticated SaaS session.
+- `GET /api/native-social/instagram/publishes/{job_id}` returns an owner-scoped durable status.
+- The request is recorded in `native_publish_jobs` and `native_publish_targets`; the unique owner/idempotency constraint prevents a duplicate job for the same key.
+- The orchestration creates a Reel container, persists its ID, polls the exact provider status until `FINISHED`, commits a `publishing` claim, then calls `media_publish` and persists the returned media ID.
+- A publish request with an ambiguous outcome is marked `needs_review`; the code does not automatically repeat the non-idempotent publish call.
+- Duplicate requests with the same key return the existing job. Reusing a key with different media/caption/connection data is rejected.
+- Poll count and interval are bounded by `INSTAGRAM_PROCESSING_MAX_POLLS` (default 24, max 60) and `INSTAGRAM_PROCESSING_POLL_SECONDS` (default 5, max 30).
+
+Important limitations:
+- The client currently must supply a public HTTPS media URL. The generated clip pipeline and private R2/S3 artifact resolver are not yet connected to this endpoint.
+- The endpoint currently runs the orchestration in the HTTP request. It is durable in its persisted phases, but it is not yet a separate queue/worker; long Meta processing may outlive an upstream HTTP timeout.
+- A job interrupted while in `processing` may require operator reconciliation. No automatic stale-job lease recovery or background worker is implemented yet.
+- The dashboard currently supports account connection/disconnection only; publish-job submission and status UI are pending.
+- No real Instagram account test, PostgreSQL integration test, backend test suite, or frontend build has been run in a real checkout. The tests in this branch are unverified until executed there.

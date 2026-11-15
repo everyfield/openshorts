@@ -212,7 +212,6 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
         owner_id = UUID(str(user.id))
         from cloud.database import session as cloud_session
         from cloud.models import UserVideo
-        from cloud import storage as cloud_storage
         async with cloud_session() as library:
             clip = await library.scalar(select(UserVideo).where(
                 UserVideo.id == body.clip_id,
@@ -220,11 +219,10 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
             ))
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
-        media_url = cloud_storage.presigned_get(clip.r2_key, expires=24 * 3600)
         job = await create_instagram_publish_job(
             owner_id=owner_id,
             connection_id=body.connection_id,
-            media_url=media_url,
+            media_key=clip.r2_key,
             caption=body.caption,
             idempotency_key=body.idempotency_key,
         )

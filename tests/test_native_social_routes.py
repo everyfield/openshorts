@@ -1,8 +1,8 @@
 """Focused tests for Instagram OAuth route safety helpers."""
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit\n\nimport pytest
 
 from cloud.config import settings
-from native_social.routes import _dashboard_redirect, _state_digest
+from pydantic import ValidationError\n\nfrom native_social.routes import (\n    InstagramPublishReconcileBody, _dashboard_redirect, _state_digest,\n)
 
 
 def test_oauth_state_is_stored_as_one_way_sha256_digest():
@@ -21,3 +21,17 @@ def test_oauth_callback_redirect_is_fixed_and_relative():
     assert parsed.path == "/"
     assert parsed.query == "instagram_connect=success"
     assert parsed.fragment == "app?tab=settings"
+
+
+
+def test_publish_reconciliation_accepts_explicit_owner_outcomes():
+    assert InstagramPublishReconcileBody(outcome="published").outcome == "published"
+    assert InstagramPublishReconcileBody(outcome="not_published").outcome == "not_published"
+    assert InstagramPublishReconcileBody(
+        outcome="published", media_id="17890000000000000"
+    ).media_id == "17890000000000000"
+
+
+def test_publish_reconciliation_rejects_unsupported_outcomes():
+    with pytest.raises(ValidationError):
+        InstagramPublishReconcileBody(outcome="retry")

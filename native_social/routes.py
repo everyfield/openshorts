@@ -1,4 +1,4 @@
-"""Authenticated Instagram OAuth routes for hosted mode only."""
+"""Instagram OAuth and publishing routes for hosted and self-hosted modes."""
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +14,9 @@ from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
 
 from native_social.crypto import get_credential_cipher
-from native_social.local_media import LocalMediaError, list_local_media_files, resolve_signed_media_token
+from native_social.local_media import (
+    LocalMediaError, list_local_media_files, resolve_signed_media_token,
+)
 from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection, SocialCredential
 from native_social.persistence import native_social_session, store_connection_credentials
@@ -24,28 +26,12 @@ from native_social.publishing import (
 )
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
-
-@router.get("/media/{token}", include_in_schema=False)
-async def instagram_local_media(token: str):
-    """Serve a short-lived signed local file URL to Meta's media fetcher."""
-    try:
-        path = resolve_signed_media_token(token)
-    except LocalMediaError as exc:
-        raise HTTPException(status_code=404, detail="Media URL is invalid or expired") from exc
-    return FileResponse(
-        path,
-        media_type="video/mp4",
-        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
-    )
-
 STATE_TTL_MINUTES = 10
 
-
-def _state_digest(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-_LOCAL_OWNER_ID = UUID(os.environ.get("NATIVE_SOCIAL_LOCAL_OWNER_ID", "a56c2b0c-6c6d-5a2e-8c7e-8a2a4f4f3d31"))
+_LOCAL_OWNER_ID = UUID(os.environ.get(
+    "NATIVE_SOCIAL_LOCAL_OWNER_ID",
+    "a56c2b0c-6c6d-5a2e-8c7e-8a2a4f4f3d31",
+))
 
 
 def _billing_enabled() -> bool:
@@ -55,13 +41,17 @@ def _billing_enabled() -> bool:
 async def _owner_id(request: Request) -> UUID:
     if _billing_enabled():
         from cloud.auth import get_current_user_required
-        owner_id = await _owner_id(request)
-        return owner_id
+        user = await get_current_user_required(request)
+        return UUID(str(user.id))
     return _LOCAL_OWNER_ID
 
 
 def _local_clip_id(owner_id: UUID, relative_path: str) -> UUID:
     return uuid5(owner_id, relative_path)
+
+
+def _state_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _dashboard_redirect(result: str) -> RedirectResponse:
@@ -77,16 +67,18 @@ def _dashboard_redirect(result: str) -> RedirectResponse:
     return RedirectResponse(url=destination, status_code=303)
 
 
-STATE_TTL_MINUTES = 10
-
-
-def _state_digest(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _dashboard_redirect(result: str) -> RedirectResponse:
-    # Fixed same-origin relative destination; no user-controlled redirect target.
-    return RedirectResponse(url=f"{settings.frontend_url}/?instagram_connect={result}#app?tab=settings", status_code=303)
+@router.get("/media/{token}", include_in_schema=False)
+async def instagram_local_media(token: str):
+    """Serve a short-lived signed local file URL to Meta's media fetcher."""
+    try:
+        path = resolve_signed_media_token(token)
+    except LocalMediaError as exc:
+        raise HTTPException(status_code=404, detail="Media URL is invalid or expired") from exc
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.get("/connect")

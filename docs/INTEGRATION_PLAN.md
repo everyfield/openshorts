@@ -33,7 +33,7 @@ Updated: 2026-11-15
 - `native_publish_jobs` and `native_publish_targets` persist request and per-account outcome.
 - `GET /api/native-social/instagram/clips` lists the authenticated user's archived R2 clips. It returns clip IDs and metadata, never signed media URLs.
 - `POST /api/native-social/instagram/publish` accepts `connection_id`, owner-owned `clip_id`, `caption` (max 2,200 characters), and `idempotency_key` (1–128 characters).
-- The server verifies clip ownership against the existing hosted video library, then generates a 24-hour R2 presigned URL server-side. The signed URL is never sent to the dashboard.
+- The server verifies clip ownership against the existing hosted video library and stores only the owner-scoped R2 object key in the publish job. The worker generates a 24-hour R2 presigned URL immediately before Meta fetches the clip. The signed URL is never stored in the database or sent to the dashboard.
 - `GET /api/native-social/instagram/publishes/{job_id}` returns owner-scoped status.
 - Publish requests are persisted and return immediately. A hosted-lifespan worker polls the PostgreSQL queue and advances each job.
 - The worker persists the container ID, polls until provider status is `FINISHED`, commits a `publishing` claim before calling `media_publish`, and persists the returned media ID.

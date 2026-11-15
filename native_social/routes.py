@@ -91,7 +91,7 @@ def _dashboard_redirect(result: str) -> RedirectResponse:
 
 @router.get("/connect")
 async def instagram_connect(request: Request):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     raw_state = secrets.token_urlsafe(48)
     digest = _state_digest(raw_state)
     async with native_social_session() as session:
@@ -178,7 +178,7 @@ async def instagram_callback(request: Request, code: str | None = None,
 
 @router.get("/connections")
 async def instagram_connections(request: Request):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     async with native_social_session() as session:
         result = await session.execute(
             select(SocialConnection).where(
@@ -205,7 +205,7 @@ async def instagram_connections(request: Request):
 
 @router.delete("/connections/{connection_id}")
 async def instagram_disconnect(connection_id: str, request: Request):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     try:
         from uuid import UUID
         parsed_id = UUID(connection_id)
@@ -215,7 +215,7 @@ async def instagram_disconnect(connection_id: str, request: Request):
         async with session.begin():
             connection = await session.scalar(select(SocialConnection).where(
                 SocialConnection.id == parsed_id,
-                SocialConnection.owner_id == user.id,
+                SocialConnection.owner_id == owner_id,
                 SocialConnection.provider == "instagram",
             ).with_for_update())
             if connection is None:
@@ -311,9 +311,9 @@ async def instagram_publish(body: InstagramPublishBody, request: Request):
 
 @router.get("/publishes")
 async def instagram_publish_history(request: Request, limit: int = 50):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     rows = await list_instagram_publish_jobs(
-        owner_id=UUID(str(user.id)), limit=max(1, min(limit, 100)),
+        owner_id=owner_id, limit=max(1, min(limit, 100)),
     )
     return {"publishes": rows}
 
@@ -322,14 +322,14 @@ async def instagram_publish_history(request: Request, limit: int = 50):
 async def instagram_reconcile_publish(
     job_id: str, body: InstagramPublishReconcileBody, request: Request,
 ):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     try:
         parsed_id = UUID(job_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Publish job not found") from exc
     try:
         return await reconcile_instagram_publish_job(
-            owner_id=UUID(str(user.id)), job_id=parsed_id,
+            owner_id=owner_id, job_id=parsed_id,
             outcome=body.outcome, media_id=body.media_id,
         )
     except LookupError as exc:
@@ -340,12 +340,12 @@ async def instagram_reconcile_publish(
 
 @router.get("/publishes/{job_id}")
 async def instagram_publish_status(job_id: str, request: Request):
-    user = await get_current_user_required(request)
+    owner_id = await _owner_id(request)
     try:
         parsed_id = UUID(job_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Publish job not found") from exc
     try:
-        return await get_publish_job(owner_id=UUID(str(user.id)), job_id=parsed_id)
+        return await get_publish_job(owner_id=owner_id, job_id=parsed_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="Publish job not found") from exc

@@ -4,14 +4,26 @@ import { apiJson } from '../lib/api';
 
 export default function InstagramConnectionsCard() {
   const [connections, setConnections] = useState([]);
+  const [clips, setClips] = useState([]);
+  const [selectedConnection, setSelectedConnection] = useState('');
+  const [selectedClip, setSelectedClip] = useState('');
+  const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const data = await apiJson('/api/native-social/instagram/connections');
-      setConnections(Array.isArray(data.connections) ? data.connections : []);
+      const [data, library] = await Promise.all([
+        apiJson('/api/native-social/instagram/connections'),
+        apiJson('/api/native-social/instagram/clips'),
+      ]);
+      const accounts = Array.isArray(data.connections) ? data.connections : [];
+      const availableClips = Array.isArray(library.clips) ? library.clips : [];
+      setConnections(accounts);
+      setClips(availableClips);
+      setSelectedConnection((current) => current || accounts.find((x) => x.health === 'connected')?.id || '');
+      setSelectedClip((current) => current || availableClips[0]?.id || '');
     } catch (_) {
       setConnections([]);
     } finally {
@@ -48,6 +60,31 @@ export default function InstagramConnectionsCard() {
     }
   };
 
+  const publish = async () => {
+    if (!selectedConnection || !selectedClip) return;
+    setBusy(true);
+    setMessage('Submitting Reel to Instagram…');
+    try {
+      const result = await apiJson('/api/native-social/instagram/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          connection_id: selectedConnection,
+          clip_id: selectedClip,
+          caption,
+          idempotency_key: window.crypto.randomUUID(),
+        }),
+      });
+      setMessage(result.status === 'published'
+        ? 'Reel published successfully.'
+        : `Publish status: ${result.status}. Job ID: ${result.job_id}`);
+    } catch (error) {
+      setMessage(error?.detail || 'Could not publish this Reel.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const disconnect = async (id) => {
     if (!window.confirm('Disconnect this Instagram account? Its saved access token will be deleted.')) return;
     setBusy(true);
@@ -74,7 +111,7 @@ export default function InstagramConnectionsCard() {
         </button>
       </div>
       <p className="text-xs text-muted leading-relaxed mb-4">
-        Connect a professional Instagram Business or Creator account. Native Reels publishing is being completed; existing Upload-Post publishing remains separate.
+        Connect a professional Instagram Business or Creator account. Select an archived clip and publish it as an Instagram Reel. Existing Upload-Post publishing remains separate.
       </p>
       {message && <p role="status" className="text-xs text-ink2 mb-3">{message}</p>}
       {loading ? (
@@ -82,7 +119,7 @@ export default function InstagramConnectionsCard() {
       ) : connections.length === 0 ? (
         <p className="text-xs text-muted">No native Instagram accounts connected.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {connections.map((account) => (
             <div key={account.id} className="flex items-center justify-between gap-3 border-t border-rule pt-3">
               <div className="min-w-0">
@@ -95,6 +132,40 @@ export default function InstagramConnectionsCard() {
               </button>
             </div>
           ))}
+          <div className="border-t border-rule pt-4 space-y-3">
+            <h3 className="text-sm font-medium text-ink">Publish a generated clip</h3>
+            <label className="block text-xs text-muted">
+              Instagram account
+              <select value={selectedConnection} onChange={(e) => setSelectedConnection(e.target.value)}
+                className="mt-1 w-full rounded-input border border-rule bg-paper2 px-3 py-2 text-sm text-ink">
+                {connections.filter((a) => a.health === 'connected').map((account) => (
+                  <option key={account.id} value={account.id}>@{account.username}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-muted">
+              Generated clip
+              <select value={selectedClip} onChange={(e) => setSelectedClip(e.target.value)}
+                className="mt-1 w-full rounded-input border border-rule bg-paper2 px-3 py-2 text-sm text-ink">
+                <option value="">Select a clip</option>
+                {clips.map((clip) => (
+                  <option key={clip.id} value={clip.id}>{clip.title} · {new Date(clip.created_at).toLocaleDateString()}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-muted">
+              Caption
+              <textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2200}
+                rows={3} placeholder="Write your Reel caption…"
+                className="mt-1 w-full rounded-input border border-rule bg-paper2 px-3 py-2 text-sm text-ink" />
+            </label>
+            <button onClick={publish} disabled={busy || !selectedConnection || !selectedClip}
+              className="btn-primary px-3 py-2 text-xs disabled:opacity-50">
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Instagram size={14} />}
+              Publish Reel
+            </button>
+            {clips.length === 0 && <p className="text-xs text-muted">No archived clips are available. Generate a clip first; it will appear here after it is saved to your library.</p>}
+          </div>
         </div>
       )}
     </section>

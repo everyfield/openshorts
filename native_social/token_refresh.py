@@ -113,7 +113,7 @@ async def refresh_due_instagram_tokens(*, limit: int = 20) -> dict[str, int]:
             if not new_token or expires_in <= 0:
                 raise InstagramAPIError("Instagram refresh response was incomplete")
             tokens["access_token"] = new_token
-            encrypted_new = KMSCredentialCipher().encrypt(
+            encrypted_new = get_credential_cipher().encrypt(
                 owner_id=owner_id, connection_id=connection_id,
                 provider="instagram", tokens=tokens,
             )

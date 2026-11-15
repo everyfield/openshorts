@@ -159,26 +159,16 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             if operation.error_code:
                 await _set_target(owner_id, job_id, "failed", error_code=operation.error_code)
                 return await get_publish_job(owner_id=owner_id, job_id=job_id)
-            if operation.status.value == "processing":
-                # The adapter uses PROCESSING for both IN_PROGRESS and FINISHED.
-                # Query raw status_code to distinguish them before publishing.
-                status_response = await api.client.get(
-                    f"https://graph.instagram.com/{api.api_version}/{container_id}",
-                    params={"fields": "status_code", "access_token": access_token},
-                )
-                payload = status_response.json()
-                if status_response.is_error or not isinstance(payload, dict):
-                    await _set_target(owner_id, job_id, "needs_review", error_code="status_lookup_failed")
-                    return await get_publish_job(owner_id=owner_id, job_id=job_id)
-                code = str(payload.get("status_code") or "").upper()
-                if code == "FINISHED":
-                    finished = True
-                    break
-                if code not in {"IN_PROGRESS", "PUBLISHED"}:
-                    await _set_target(owner_id, job_id, "needs_review", error_code="unexpected_container_status")
-                    return await get_publish_job(owner_id=owner_id, job_id=job_id)
-            else:
+            if operation.provider_status == "FINISHED":
+                finished = True
+                break
+            if operation.provider_status == "IN_PROGRESS":
+                pass
+            elif operation.provider_status == "ERROR":
                 await _set_target(owner_id, job_id, "failed", error_code="container_processing_failed")
+                return await get_publish_job(owner_id=owner_id, job_id=job_id)
+            else:
+                await _set_target(owner_id, job_id, "needs_review", error_code="unexpected_container_status")
                 return await get_publish_job(owner_id=owner_id, job_id=job_id)
             if poll + 1 < max_polls:
                 await asyncio.sleep(poll_seconds)

@@ -448,6 +448,7 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
             ambiguous = select(PublishTarget.publish_job_id).where(
                 PublishTarget.provider == "instagram",
                 PublishTarget.status == "publishing",
+                expired_lease,
             )
             ambiguous_result = await session.execute(
                 update(PublishTarget)

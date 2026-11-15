@@ -79,7 +79,7 @@ def test_unsupported_provider_is_rejected():
 def test_local_credentials_round_trip_without_external_kms():
     from native_social.crypto import LocalCredentialCipher
 
-    cipher = LocalCredentialCipher(key=b"\\x11" * 32)
+    cipher = LocalCredentialCipher(key=b"\x11" * 32)
     owner, connection = uuid4(), uuid4()
     encrypted = cipher.encrypt(
         owner_id=owner, connection_id=connection, provider="instagram",
@@ -101,7 +101,7 @@ def test_local_credentials_round_trip_without_external_kms():
 def test_local_credentials_are_bound_to_owner_and_connection():
     from native_social.crypto import LocalCredentialCipher
 
-    cipher = LocalCredentialCipher(key=b"\\x22" * 32)
+    cipher = LocalCredentialCipher(key=b"\x22" * 32)
     owner, connection = uuid4(), uuid4()
     encrypted = cipher.encrypt(
         owner_id=owner, connection_id=connection, provider="instagram",
@@ -117,19 +117,19 @@ def test_local_credentials_are_bound_to_owner_and_connection():
 def test_local_cipher_rejects_wrong_key_and_kms_records():
     from native_social.crypto import EncryptedCredentials, LocalCredentialCipher
 
-    cipher = LocalCredentialCipher(key=b"\\x33" * 32)
+    cipher = LocalCredentialCipher(key=b"\x33" * 32)
     encrypted = cipher.encrypt(
         owner_id="owner", connection_id="connection", provider="instagram",
         tokens={"access_token": "secret"},
     )
-    wrong = LocalCredentialCipher(key=b"\\x44" * 32)
+    wrong = LocalCredentialCipher(key=b"\x44" * 32)
     with pytest.raises(CredentialEncryptionError):
         wrong.decrypt(
             owner_id="owner", connection_id="connection", provider="instagram",
             encrypted=encrypted,
         )
     kms_record = EncryptedCredentials(
-        encrypted_data_key=b"wrapped", nonce=b"\\x00" * 12,
+        encrypted_data_key=b"wrapped", nonce=b"\x00" * 12,
         ciphertext=b"ciphertext", kms_key_id="arn:aws:kms:example",
     )
     with pytest.raises(CredentialEncryptionError):

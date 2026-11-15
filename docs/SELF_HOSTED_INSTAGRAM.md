@@ -65,8 +65,8 @@ The Instagram account must be a Professional account. Meta may require app revie
 ## Start
 
 ```bash
-docker compose up -d --build
-docker compose logs -f backend caddy
+docker compose -f docker-compose.instagram.yml up -d --build
+docker compose -f docker-compose.instagram.yml logs -f backend caddy
 ```
 
 Open `https://YOUR_DOMAIN`. Caddy prompts for the configured HTTP Basic Auth credentials. The dashboard and private API routes are protected. Only the OAuth callback and signed media endpoint are public so Meta can complete OAuth and fetch a Reel.
@@ -84,7 +84,7 @@ Put publishable MP4 files under the local `output/` directory. The Instagram cli
 Back up `output/`, PostgreSQL, and `.env` together. Keep key backups offline or in a separate encrypted backup. A PostgreSQL dump can be made with:
 
 ```bash
-docker compose exec -T postgres pg_dump -U openshorts openshorts > openshorts.sql
+docker compose -f docker-compose.instagram.yml exec -T postgres pg_dump -U openshorts openshorts > openshorts.sql
 ```
 
 Do not publish `.env`, database dumps, or OAuth credentials.

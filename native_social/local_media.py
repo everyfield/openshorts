@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import time
 from pathlib import Path
@@ -60,23 +61,61 @@ def resolve_local_media_path(relative_path: str) -> Path:
 
 
 def list_local_media_files(*, limit: int = 100) -> list[tuple[str, Path]]:
-    """List publishable MP4 files beneath the configured local media root."""
+    """List canonical generated clips plus standalone MP4s in local media storage."""
     root = _root()
     if not root.exists():
         return []
-    found: list[tuple[str, Path]] = []
-    for candidate in root.rglob("*"):
-        if not candidate.is_file() or candidate.suffix.lower() != ".mp4":
+    found: dict[str, Path] = {}
+    metadata_dirs: set[Path] = set()
+
+    # For generated jobs, use metadata's clip count and resolve the latest
+    # captioned/recut/hooked/watermarked version, never the original source MP4.
+    for metadata_path in root.rglob("*_metadata.json"):
+        metadata_dirs.add(metadata_path.parent.resolve())
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            shorts = payload.get("shorts", []) if isinstance(payload, dict) else []
+            if not isinstance(shorts, list):
+                continue
+            base_name = metadata_path.name.removesuffix("_metadata.json")
+            for index in range(len(shorts)):
+                clean = f"{base_name}_clip_{index + 1}.mp4"
+                candidates = [metadata_path.parent / clean]
+                patterns = (
+                    f"subtitled_*_{clean}",
+                    f"recut_*_{clean}",
+                    f"hooked_*_{clean}",
+                    f"hook_{clean}",
+                    f"wm_*{clean}",
+                )
+                for pattern in patterns:
+                    candidates.extend(metadata_path.parent.glob(pattern))
+                existing = [path for path in candidates if path.is_file()]
+                if not existing:
+                    continue
+                selected = max(existing, key=lambda path: path.stat().st_mtime)
+                relative = selected.resolve(strict=True).relative_to(root).as_posix()
+                found[relative] = resolve_local_media_path(relative)
+        except (OSError, ValueError, TypeError, LocalMediaError):
+            continue
+
+    # Also allow manually copied MP4 files in folders that are not generated
+    # job folders. Do not accidentally expose original sources from a job.
+    for candidate in root.rglob("*.mp4"):
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        if any(resolved == folder or folder in resolved.parents for folder in metadata_dirs):
             continue
         try:
-            resolved = candidate.resolve(strict=True)
             relative = resolved.relative_to(root).as_posix()
-            safe = resolve_local_media_path(relative)
+            found[relative] = resolve_local_media_path(relative)
         except (OSError, ValueError, LocalMediaError):
             continue
-        found.append((relative, safe))
-    found.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
-    return found[:max(1, min(limit, 500))]
+
+    rows = list(found.items())
+    rows.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+    return rows[:max(1, min(limit, 500))]
 
 
 def create_signed_local_media_url(relative_path: str, *, ttl_seconds: int = 1800) -> str:

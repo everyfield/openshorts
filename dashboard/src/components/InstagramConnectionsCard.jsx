@@ -71,7 +71,7 @@ export default function InstagramConnectionsCard() {
     setBusy(true);
     setMessage('Submitting Reel to Instagram…');
     try {
-      const result = await apiJson('/api/native-social/instagram/publish', {
+      let result = await apiJson('/api/native-social/instagram/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -81,9 +81,16 @@ export default function InstagramConnectionsCard() {
           idempotency_key: window.crypto.randomUUID(),
         }),
       });
-      setMessage(result.status === 'published'
-        ? 'Reel published successfully.'
-        : `Publish status: ${result.status}. Job ID: ${result.job_id}`);
+      setMessage(`Publish queued. Job ID: ${result.job_id}`);
+      for (let attempt = 0; attempt < 45 && !['published', 'failed', 'needs_review'].includes(result.status); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        result = await apiJson('/api/native-social/instagram/publishes/' + encodeURIComponent(result.job_id));
+        setMessage(`Instagram publish status: ${result.status}`);
+      }
+      if (result.status === 'published') setMessage('Reel published successfully.');
+      else if (result.status === 'needs_review') setMessage('Instagram could not confirm the publish result. Review the account before retrying.');
+      else if (result.status === 'failed') setMessage('Instagram rejected the Reel. Check the clip and account configuration.');
+      else setMessage(`Publishing is still in progress. Job ID: ${result.job_id}`);
     } catch (error) {
       setMessage(error?.detail || 'Could not publish this Reel.');
     } finally {

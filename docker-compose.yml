@@ -49,6 +49,7 @@
     container_name: openshorts-frontend
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      VITE_NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-0}
     expose:
       - "5173"
     volumes:

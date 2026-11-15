@@ -125,9 +125,10 @@ export default function InstagramConnectionsCard() {
     );
     let payload;
     if (published) {
-      const mediaId = window.prompt('Enter the Instagram media ID for the published Reel:');
-      if (!mediaId || !mediaId.trim()) return;
-      payload = { outcome: 'published', media_id: mediaId.trim() };
+      const mediaId = window.prompt('Instagram media ID (optional):', '');
+      if (mediaId === null) return;
+      payload = { outcome: 'published' };
+      if (mediaId.trim()) payload.media_id = mediaId.trim();
     } else {
       if (!window.confirm('Confirm that this Reel is NOT present in Instagram? This will not retry publishing.')) return;
       payload = { outcome: 'not_published' };

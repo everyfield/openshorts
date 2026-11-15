@@ -9,13 +9,14 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from uuid import UUID
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy import delete, select, update
 from starlette.responses import RedirectResponse
 
 from cloud.auth import get_current_user_required
 from cloud.config import settings
 from native_social.crypto import get_credential_cipher
+from native_social.local_media import LocalMediaError, resolve_signed_media_token
 from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection, SocialCredential
 from native_social.persistence import native_social_session, store_connection_credentials
@@ -25,6 +26,20 @@ from native_social.publishing import (
 )
 
 router = APIRouter(prefix="/api/native-social/instagram", tags=["native-social-instagram"])
+
+@router.get("/media/{token}", include_in_schema=False)
+async def instagram_local_media(token: str):
+    """Serve a short-lived signed local file URL to Meta's media fetcher."""
+    try:
+        path = resolve_signed_media_token(token)
+    except LocalMediaError as exc:
+        raise HTTPException(status_code=404, detail="Media URL is invalid or expired") from exc
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
 STATE_TTL_MINUTES = 10
 
 

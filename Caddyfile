@@ -11,7 +11,7 @@
     # Protect the dashboard and all remaining API routes with installation
     # credentials. Generate AUTH_PASSWORD_HASH with: caddy hash-password.
     handle {
-        basicauth {
+        basic_auth {
             {$AUTH_USER} {$AUTH_PASSWORD_HASH}
         }
 

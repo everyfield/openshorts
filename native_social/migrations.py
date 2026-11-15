@@ -31,7 +31,21 @@ MIGRATIONS = (
     (1, _initial_schema),
     (2, _oauth_state_schema),
     (3, _token_refresh_lifecycle),
+    (4, _publish_worker_leases),
 )
+
+
+async def _publish_worker_leases(connection: AsyncConnection) -> None:
+    """Add fenced worker leases for safe recovery of long-running jobs."""
+    await connection.execute(text(
+        "ALTER TABLE native_publish_targets "
+        "ADD COLUMN IF NOT EXISTS worker_lease_token VARCHAR(64) NULL, "
+        "ADD COLUMN IF NOT EXISTS worker_lease_until TIMESTAMPTZ NULL"
+    ))
+    await connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_native_publish_targets_worker_lease "
+        "ON native_publish_targets (provider, status, worker_lease_until)"
+    ))
 
 
 async def apply_native_social_migrations(connection: AsyncConnection) -> None:

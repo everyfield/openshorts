@@ -333,9 +333,15 @@ async def recover_stale_instagram_publish_jobs(*, stale_after_seconds: int = 900
 
 
 async def run_instagram_publish_worker(*, poll_interval_seconds: float = 3.0) -> None:
-    """Poll the durable queue; database state is shared across app instances."""
+    """Poll publish jobs and refresh due Instagram credentials."""
+    last_token_refresh = 0.0
     while True:
         try:
+            loop = asyncio.get_running_loop()
+            if loop.time() - last_token_refresh >= 300:
+                from .token_refresh import refresh_due_instagram_tokens
+                await refresh_due_instagram_tokens()
+                last_token_refresh = loop.time()
             async with native_social_session() as session:
                 result = await session.execute(
                     select(PublishJob.owner_id, PublishJob.id)

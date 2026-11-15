@@ -16,6 +16,8 @@ function isPublishableHealth(health) {
 export default function InstagramConnectionsCard() {
   const [connections, setConnections] = useState([]);
   const [clips, setClips] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState('');
   const [selectedClip, setSelectedClip] = useState('');
   const [caption, setCaption] = useState('');
@@ -28,6 +30,12 @@ export default function InstagramConnectionsCard() {
       const data = await apiJson('/api/native-social/instagram/connections');
       const accounts = Array.isArray(data.connections) ? data.connections : [];
       setConnections(accounts);
+      try {
+        const historyData = await apiJson('/api/native-social/instagram/publishes?limit=50');
+        setHistory(Array.isArray(historyData.publishes) ? historyData.publishes : []);
+      } catch (_) {
+        setHistory([]);
+      }
       setSelectedConnection((current) =>
         accounts.some((x) => x.id === current && isPublishableHealth(x.health))
           ? current : accounts.find((x) => isPublishableHealth(x.health))?.id || '');
@@ -43,6 +51,7 @@ export default function InstagramConnectionsCard() {
     } catch (_) {
       setConnections([]);
       setClips([]);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
@@ -102,8 +111,39 @@ export default function InstagramConnectionsCard() {
       else if (result.status === 'needs_review') setMessage('Instagram could not confirm the publish result. Review the account before retrying.');
       else if (result.status === 'failed') setMessage('Instagram rejected the Reel. Check the clip and account configuration.');
       else setMessage(`Publishing is still in progress. Job ID: ${result.job_id}`);
+      await load();
     } catch (error) {
       setMessage(error?.detail || 'Could not publish this Reel.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reconcile = async (job) => {
+    if (job.status !== 'needs_review') return;
+    const published = window.confirm(
+      'Check this account in Instagram first.\n\nOK: The Reel is visible in Instagram.\nCancel: Check whether it is absent.'
+    );
+    let payload;
+    if (published) {
+      const mediaId = window.prompt('Enter the Instagram media ID for the published Reel:');
+      if (!mediaId || !mediaId.trim()) return;
+      payload = { outcome: 'published', media_id: mediaId.trim() };
+    } else {
+      if (!window.confirm('Confirm that this Reel is NOT present in Instagram? This will not retry publishing.')) return;
+      payload = { outcome: 'not_published' };
+    }
+    setBusy(true);
+    try {
+      await apiJson('/api/native-social/instagram/publishes/' + encodeURIComponent(job.job_id) + '/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      setMessage(published ? 'Publish marked as confirmed.' : 'Marked as not published. No automatic retry was started.');
+      await load();
+    } catch (error) {
+      setMessage(error?.detail || 'Could not reconcile this publish.');
     } finally {
       setBusy(false);
     }
@@ -190,6 +230,36 @@ export default function InstagramConnectionsCard() {
             </button>
             {clips.length === 0 && <p className="text-xs text-muted">No archived clips are available. Generate a clip first; it will appear here after it is saved to your library.</p>}
           </div>
+<div className="border-t border-rule pt-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium text-ink">Publishing history</h3>
+              <button type="button" onClick={load} disabled={busy} className="btn-quiet px-2 py-1 text-xs">Refresh</button>
+            </div>
+            {history.length === 0 ? (
+              <p className="text-xs text-muted">No Instagram publishing activity yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {history.map((job) => (
+                  <div key={job.job_id} className="border-t border-rule pt-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-ink">{job.account ? '@' + job.account : 'Instagram'} · {job.status.replaceAll('_', ' ')}</p>
+                        <p className="text-xs text-muted">{job.created_at ? new Date(job.created_at).toLocaleString() : ''}</p>
+                        {job.caption && <p className="text-xs text-muted truncate">{job.caption}</p>}
+                        {job.media_id && <p className="text-xs text-muted">Media ID: {job.media_id}</p>}
+                        {job.error_code && <p className="text-xs text-muted">Code: {job.error_code}</p>}
+                      </div>
+                      {job.status === 'needs_review' && (
+                        <button type="button" onClick={() => reconcile(job)} disabled={busy}
+                          className="btn-primary px-2 py-1 text-xs shrink-0">Review</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       )}
     </section>

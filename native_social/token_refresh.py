@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from .crypto import KMSCredentialCipher
 from .instagram import InstagramAPI, InstagramAPIError
@@ -32,6 +32,27 @@ async def refresh_due_instagram_tokens(*, limit: int = 20) -> dict[str, int]:
 
     async with native_social_session() as session:
         async with session.begin():
+            expired_ids = select(SocialCredential.connection_id).where(
+                SocialCredential.expires_at.is_not(None),
+                SocialCredential.expires_at <= now,
+            )
+            await session.execute(
+                update(SocialConnection)
+                .where(
+                    SocialConnection.id.in_(expired_ids),
+                    SocialConnection.provider == "instagram",
+                    SocialConnection.health.in_(["connected", "refresh_degraded"]),
+                )
+                .values(health="reauth_required")
+            )
+            await session.execute(
+                update(SocialCredential)
+                .where(
+                    SocialCredential.connection_id.in_(expired_ids),
+                    SocialCredential.last_error_code.is_(None),
+                )
+                .values(last_error_code="token_expired")
+            )
             result = await session.execute(
                 select(SocialCredential, SocialConnection)
                 .join(SocialConnection, SocialConnection.id == SocialCredential.connection_id)

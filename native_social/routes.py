@@ -200,7 +200,6 @@ async def instagram_publishable_clips(request: Request):
             "clip_index": row.clip_index,
             "title": row.title or "Short",
             "created_at": row.created_at.isoformat() if row.created_at else None,
-            "media_url": cloud_storage.presigned_get(row.r2_key, expires=24 * 3600),
         } for row in rows]}
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Clip library is temporarily unavailable") from exc

@@ -303,7 +303,6 @@ async def list_instagram_publish_jobs(*, owner_id: UUID, limit: int = 50) -> lis
             "account": account_name,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "completed_at": target.completed_at.isoformat() if target.completed_at else None,
-            "error_message": target.error_message,
         } for job, target, account_name in rows]
 
 

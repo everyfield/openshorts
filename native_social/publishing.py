@@ -136,9 +136,13 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
 
     api = InstagramAPI()
     try:
-        from cloud import storage as cloud_storage
-        media_url = cloud_storage.presigned_get(media_key, expires=24 * 3600)
-        _validate_public_media_url(media_url)
+        try:
+            from cloud import storage as cloud_storage
+            media_url = cloud_storage.presigned_get(media_key, expires=24 * 3600)
+            _validate_public_media_url(media_url)
+        except Exception:
+            await _set_target(owner_id, job_id, "failed", error_code="media_storage_unavailable")
+            return await get_publish_job(owner_id=owner_id, job_id=job_id)
         if not container_id:
             container_id = await api.create_reel_container(
                 access_token=access_token, account_id=account_id,

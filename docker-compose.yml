@@ -1,8 +1,8 @@
   backend:
     build: .
     container_name: openshorts-backend
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-0}
       NATIVE_SOCIAL_ENCRYPTION_MODE: ${NATIVE_SOCIAL_ENCRYPTION_MODE:-local}
@@ -47,14 +47,34 @@
       context: ./dashboard
       target: dev
     container_name: openshorts-frontend
-    ports:
-      - "5175:5173"
+    expose:
+      - "5173"
     volumes:
       - ./dashboard:/app
       - /app/node_modules
     restart: unless-stopped
     depends_on:
       - backend
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: openshorts-caddy
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      AUTH_USER: ${AUTH_USER:?Set AUTH_USER in .env}
+      AUTH_PASSWORD_HASH: ${AUTH_PASSWORD_HASH:?Set AUTH_PASSWORD_HASH in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - openshorts_caddy_data:/data
+      - openshorts_caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
   renderer:
     build:
@@ -75,3 +95,5 @@
 
 volumes:
   openshorts_postgres:
+  openshorts_caddy_data:
+  openshorts_caddy_config:

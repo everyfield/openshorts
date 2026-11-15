@@ -7,6 +7,7 @@ import seo from './vite-plugin-seo'
 // the host against a backend reachable at localhost (no CORS, same-origin).
 const backend = process.env.VITE_PROXY_TARGET || 'http://backend:8000'
 const renderer = process.env.VITE_RENDER_TARGET || 'http://renderer:3100'
+const selfHostedDomain = process.env.DOMAIN
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -32,7 +33,8 @@ export default defineConfig({
   server: {
     allowedHosts: [
       'openshorts.app',
-      'www.openshorts.app'
+      'www.openshorts.app',
+      ...(selfHostedDomain ? [selfHostedDomain] : [])
     ],
     proxy: {
       '/api': { target: backend, changeOrigin: true },

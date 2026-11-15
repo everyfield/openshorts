@@ -29,10 +29,20 @@ async def create_instagram_publish_job(
     *, owner_id: UUID, connection_id: UUID, media_key: str,
     caption: str, idempotency_key: str,
 ) -> dict:
-    try:
-        resolve_local_media_path(media_key)
-    except LocalMediaError as exc:
-        raise ValueError("A valid local media file path is required") from exc
+    local_mode = (
+        os.environ.get("NATIVE_SOCIAL_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+        and os.environ.get("BILLING_ENABLED", "").strip().lower() not in {"1", "true", "yes"}
+    )
+    if local_mode:
+        try:
+            resolve_local_media_path(media_key)
+        except LocalMediaError as exc:
+            raise ValueError("A valid local media file path is required") from exc
+    else:
+        expected_prefix = f"users/{owner_id}/"
+        if (not media_key or len(media_key) > 1024 or not media_key.startswith(expected_prefix)
+                or ".." in media_key or "\\" in media_key):
+            raise ValueError("A valid owner-scoped R2 clip key is required")
 
     if len(caption) > 2200:
         raise ValueError("Instagram captions must be at most 2,200 characters")
@@ -143,10 +153,15 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
     api = InstagramAPI()
     try:
         try:
-            media_url = create_signed_local_media_url(media_key, ttl_seconds=1800)
+            if (os.environ.get("NATIVE_SOCIAL_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+                    and os.environ.get("BILLING_ENABLED", "").strip().lower() not in {"1", "true", "yes"}):
+                media_url = create_signed_local_media_url(media_key, ttl_seconds=1800)
+            else:
+                from cloud import storage as cloud_storage
+                media_url = cloud_storage.presigned_get(media_key, expires=24 * 3600)
             _validate_public_media_url(media_url)
         except Exception:
-            await _set_target(owner_id, job_id, "failed", error_code="local_media_unavailable", worker_token=worker_token)
+            await _set_target(owner_id, job_id, "failed", error_code="media_storage_unavailable", worker_token=worker_token)
             return await get_publish_job(owner_id=owner_id, job_id=job_id)
         if not container_id:
             container_id = await api.create_reel_container(

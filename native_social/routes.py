@@ -15,7 +15,7 @@ from starlette.responses import RedirectResponse
 
 from cloud.auth import get_current_user_required
 from cloud.config import settings
-from native_social.crypto import KMSCredentialCipher
+from native_social.crypto import get_credential_cipher
 from native_social.instagram import InstagramAPI, InstagramAPIError
 from native_social.models import OAuthState, SocialConnection, SocialCredential
 from native_social.persistence import native_social_session, store_connection_credentials
@@ -113,7 +113,7 @@ async def instagram_callback(request: Request, code: str | None = None,
                     display_name=account.display_name,
                     scopes=list(account.scopes),
                     tokens=tokens,
-                    cipher=KMSCredentialCipher(),
+                    cipher=get_credential_cipher(),
                     expires_at=expires_at,
                 )
     except (InstagramAPIError, ValueError, RuntimeError):

@@ -47,13 +47,12 @@ services:
   frontend:
     build:
       context: ./dashboard
-      target: dev
+      target: prod
+      args:
+        VITE_NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-1}
     container_name: openshorts-frontend
-    environment:
-      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
-      VITE_NATIVE_SOCIAL_ENABLED: ${NATIVE_SOCIAL_ENABLED:-1}
     expose:
-      - "5173"
+      - "80"
     volumes:
       - ./dashboard:/app
       - /app/node_modules

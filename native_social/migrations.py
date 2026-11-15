@@ -27,14 +27,6 @@ async def _token_refresh_lifecycle(connection: AsyncConnection) -> None:
     ))
 
 
-MIGRATIONS = (
-    (1, _initial_schema),
-    (2, _oauth_state_schema),
-    (3, _token_refresh_lifecycle),
-    (4, _publish_worker_leases),
-)
-
-
 async def _publish_worker_leases(connection: AsyncConnection) -> None:
     """Add fenced worker leases for safe recovery of long-running jobs."""
     await connection.execute(text(
@@ -47,6 +39,13 @@ async def _publish_worker_leases(connection: AsyncConnection) -> None:
         "ON native_publish_targets (provider, status, worker_lease_until)"
     ))
 
+
+MIGRATIONS = (
+    (1, _initial_schema),
+    (2, _oauth_state_schema),
+    (3, _token_refresh_lifecycle),
+    (4, _publish_worker_leases),
+)
 
 async def apply_native_social_migrations(connection: AsyncConnection) -> None:
     """Apply ordered migrations once, serialized across application instances."""

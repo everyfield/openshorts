@@ -15,7 +15,7 @@ from sqlalchemy import select
 import httpx
 
 from .crypto import KMSCredentialCipher
-from .instagram import InstagramAPI, InstagramAPIError
+from .instagram import InstagramAPI, InstagramAPIError, _validate_public_media_url
 from .models import PublishJob, PublishTarget, SocialConnection
 from .persistence import load_connection_credentials, native_social_session
 
@@ -30,6 +30,7 @@ async def create_instagram_publish_job(
 ) -> dict:
     if not media_url or len(media_url) > 4096:
         raise ValueError("A valid public HTTPS media URL is required")
+    _validate_public_media_url(media_url)
     if len(caption) > 2200:
         raise ValueError("Instagram captions must be at most 2,200 characters")
     if not idempotency_key or len(idempotency_key) > 128:
@@ -123,7 +124,7 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
             access_token = credentials["access_token"]
             if not access_token:
                 raise RuntimeError("Instagram access token unavailable")
-            # Persist a worker lease/attempt before making provider requests.
+            # Persist the processing claim/attempt before making provider requests.
             target.attempt_count += 1
             target.started_at = target.started_at or _now()
             target.status = "processing"

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+import httpx
 
 from .crypto import KMSCredentialCipher
 from .instagram import InstagramAPI, InstagramAPIError
@@ -224,12 +224,15 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 target.completed_at = _now()
                 job.status = "published"
         return await get_publish_job(owner_id=owner_id, job_id=job_id)
+    except httpx.HTTPError:
+        # A transport timeout may occur after Meta received the request. For
+        # container creation or publishing, never assume that nothing happened.
+        await _set_target(owner_id, job_id, "needs_review", error_code="provider_transport_outcome_unknown")
+        return await get_publish_job(owner_id=owner_id, job_id=job_id)
     except (InstagramAPIError, ValueError):
-        # Container creation/status errors are safe to report as failed unless
-        # the one-shot publish claim has already been committed.
         current = await get_publish_job(owner_id=owner_id, job_id=job_id)
-        if current["status"] == "publishing":
-            await _set_target(owner_id, job_id, "needs_review", error_code="publish_outcome_unknown")
+        if current["status"] in {"publishing", "processing"}:
+            await _set_target(owner_id, job_id, "needs_review", error_code="provider_operation_outcome_unknown")
         else:
             await _set_target(owner_id, job_id, "failed", error_code="instagram_api_error")
         return await get_publish_job(owner_id=owner_id, job_id=job_id)

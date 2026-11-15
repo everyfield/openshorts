@@ -95,7 +95,7 @@ class InstagramAPI:
         if not self.app_secret:
             raise InstagramAPIError("Instagram app secret is not configured")
         response = await self.client.get(
-            f"{GRAPH_BASE}/{self.api_version}/access_token",
+            f"{GRAPH_BASE}/access_token",
             params={
                 "grant_type": "ig_exchange_token",
                 "client_secret": self.app_secret,
@@ -109,7 +109,7 @@ class InstagramAPI:
 
     async def refresh_long_lived_token(self, access_token: str) -> dict[str, Any]:
         response = await self.client.get(
-            f"{GRAPH_BASE}/{self.api_version}/refresh_access_token",
+            f"{GRAPH_BASE}/refresh_access_token",
             params={"grant_type": "ig_refresh_token", "access_token": access_token},
         )
         payload = _json_or_error(response, "Instagram access-token refresh failed")

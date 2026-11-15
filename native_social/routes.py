@@ -93,7 +93,9 @@ async def instagram_callback(request: Request, code: str | None = None,
         long_token = await api.exchange_long_lived_token(short_token["access_token"])
         account = await api.validate_account(long_token["access_token"])
         expires_in = int(long_token.get("expires_in") or 0)
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in) if expires_in > 0 else None
+        if expires_in <= 0:
+            raise InstagramAPIError("Instagram long-lived token response omitted expires_in")
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         connection_id = uuid4()
         tokens = {
             "access_token": long_token["access_token"],

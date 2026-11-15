@@ -58,6 +58,27 @@ def resolve_local_media_path(relative_path: str) -> Path:
     return resolved
 
 
+
+def list_local_media_files(*, limit: int = 100) -> list[tuple[str, Path]]:
+    """List publishable MP4 files beneath the configured local media root."""
+    root = _root()
+    if not root.exists():
+        return []
+    found: list[tuple[str, Path]] = []
+    for candidate in root.rglob("*"):
+        if not candidate.is_file() or candidate.suffix.lower() != ".mp4":
+            continue
+        try:
+            resolved = candidate.resolve(strict=True)
+            relative = resolved.relative_to(root).as_posix()
+            safe = resolve_local_media_path(relative)
+        except (OSError, ValueError, LocalMediaError):
+            continue
+        found.append((relative, safe))
+    found.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+    return found[:max(1, min(limit, 500))]
+
+
 def create_signed_local_media_url(relative_path: str, *, ttl_seconds: int = 1800) -> str:
     base = os.environ.get("NATIVE_SOCIAL_PUBLIC_BASE_URL", "").strip().rstrip("/")
     parsed = urlsplit(base)

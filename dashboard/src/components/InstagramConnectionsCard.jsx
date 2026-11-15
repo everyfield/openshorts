@@ -230,11 +230,9 @@ export default function InstagramConnectionsCard() {
             </button>
             {clips.length === 0 && <p className="text-xs text-muted">No archived clips are available. Generate a clip first; it will appear here after it is saved to your library.</p>}
           </div>
->
-
         </div>
       )}
-<div className="border-t border-rule pt-4 space-y-3">
+      <div className="border-t border-rule pt-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium text-ink">Publishing history</h3>
           <button type="button" onClick={load} disabled={busy} className="btn-quiet px-2 py-1 text-xs">Refresh</button>
@@ -262,7 +260,7 @@ export default function InstagramConnectionsCard() {
             ))}
           </div>
         )}
-        </div
+      </div>
     </section>
   );
 }

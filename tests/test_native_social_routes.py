@@ -1,8 +1,14 @@
 """Focused tests for Instagram OAuth route safety helpers."""
-from urllib.parse import urlsplit\n\nimport pytest
+from urllib.parse import urlsplit
+
+import pytest
 
 from cloud.config import settings
-from pydantic import ValidationError\n\nfrom native_social.routes import (\n    InstagramPublishReconcileBody, _dashboard_redirect, _state_digest,\n)
+from pydantic import ValidationError
+
+from native_social.routes import (
+    InstagramPublishReconcileBody, _dashboard_redirect, _state_digest,
+)
 
 
 def test_oauth_state_is_stored_as_one_way_sha256_digest():

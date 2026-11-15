@@ -47,6 +47,8 @@
       context: ./dashboard
       target: dev
     container_name: openshorts-frontend
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
     expose:
       - "5173"
     volumes:

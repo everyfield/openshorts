@@ -150,16 +150,16 @@ def test_instagram_api_error_does_not_leak_token():
 
 
 
-def test_publish_job_rejects_non_public_media_urls_before_database_access():
+def test_publish_job_rejects_invalid_media_keys_before_database_access():
     from uuid import uuid4
     from native_social.publishing import create_instagram_publish_job
 
     async def run():
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="owner-scoped R2 clip key"):
             await create_instagram_publish_job(
                 owner_id=uuid4(),
                 connection_id=uuid4(),
-                media_url="http://127.0.0.1/private.mp4",
+                media_key="http://127.0.0.1/private.mp4",
                 caption="test",
                 idempotency_key="test-key",
             )

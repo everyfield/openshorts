@@ -1,0 +1,25 @@
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Meta needs unauthenticated access only to the OAuth callback and
+    # short-lived HMAC-signed local media URLs.
+    @meta_public path /api/native-social/instagram/callback /api/native-social/instagram/media/*
+    handle @meta_public {
+        reverse_proxy backend:8000
+    }
+
+    # Protect the dashboard and all remaining API routes with installation
+    # credentials. Generate AUTH_PASSWORD_HASH with: caddy hash-password.
+    handle {
+        basicauth {
+            {$AUTH_USER} {$AUTH_PASSWORD_HASH}
+        }
+
+        @backend path /api/* /videos/* /health/* /mcp* /docs* /openapi.json
+        handle @backend {
+            reverse_proxy backend:8000
+        }
+
+        reverse_proxy frontend:5173
+    }
+}

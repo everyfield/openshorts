@@ -20,10 +20,10 @@ Updated: 2026-11-15
 - OAuth state is cryptographically random, stored as a SHA-256 digest, expires after 10 minutes, and is consumed atomically once in PostgreSQL.
 - Callback exchanges the authorization code, obtains a long-lived token, validates the professional account, and persists credentials through AWS KMS envelope encryption.
 - Owner-scoped list and disconnect routes; disconnect deletes the local encrypted credential.
-- Settings UI supports connect, list, and disconnect.
+- Settings UI supports connect, list, disconnect, and clear health states (`connected`, `refresh_degraded`, `reauth_required`). Reconnect uses the existing OAuth flow.
 
 ### Provider API
-- Instagram Login authorization, code exchange, long-lived token exchange, and refresh transport.
+- Instagram Login authorization, code exchange, long-lived token exchange, and refresh transport. Long-lived tokens are refreshed automatically when they enter the 14-day expiry window; refresh is attempted at most once per six hours after a failure.
 - Professional-account identity validation.
 - Reels container creation, exact processing status lookup, and explicit publish request.
 - HTTPS media URL validation; localhost and private/reserved IP literals are rejected.
@@ -51,6 +51,8 @@ Updated: 2026-11-15
 - OAuth credentials use AES-256-GCM envelope encryption with AWS KMS-generated data keys.
 - KMS encryption context binds ciphertext to owner, connection, provider, and purpose.
 - No plaintext or local-key fallback. Set `NATIVE_SOCIAL_KMS_KEY_ID`; grant the application role `kms:GenerateDataKey` and `kms:Decrypt`.
+- Refresh claims use a PostgreSQL lease to avoid concurrent refreshes across app replicas. Refreshed credentials are re-encrypted with a new KMS data key; raw tokens and provider error messages are never written to logs or UI.
+- Expired or authentication-rejected tokens move to `reauth_required`; transient refresh failures move to `refresh_degraded` and retain publish access while retrying.
 
 ## Remaining before production
 

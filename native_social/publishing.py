@@ -54,6 +54,9 @@ async def create_instagram_publish_job(
                     PublishTarget.publish_job_id == existing.id,
                     PublishTarget.connection_id == connection_id,
                 ))
+                if (existing.media_reference != media_url or existing.caption != caption
+                        or target is None):
+                    raise ValueError("Idempotency key was already used for a different publish request")
                 return _job_result(existing, target)
             job = PublishJob(
                 id=uuid4(), owner_id=owner_id, media_reference=media_url,
@@ -104,7 +107,11 @@ async def process_instagram_publish_job(*, owner_id: UUID, job_id: UUID) -> dict
                 target.error_message = "Publish outcome is unknown; reconcile in Instagram before retrying."
                 job.status = "needs_review"
                 return _job_result(job, target)
-            if target.status not in {"queued", "pending", "processing"}:
+            if target.status == "processing":
+                # A second request/worker must never create another container.
+                # Stale processing jobs require explicit operator reconciliation.
+                return _job_result(job, target)
+            if target.status not in {"queued", "pending"}:
                 raise ValueError("Publish target is not in a runnable state")
             connection = await session.get(SocialConnection, target.connection_id)
             if connection is None or connection.owner_id != owner_id or connection.provider != "instagram":

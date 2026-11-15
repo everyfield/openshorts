@@ -43,7 +43,7 @@ async def create_instagram_publish_job(
                 SocialConnection.id == connection_id,
                 SocialConnection.owner_id == owner_id,
                 SocialConnection.provider == "instagram",
-                SocialConnection.health == "connected",
+                SocialConnection.health.in_(["connected", "refresh_degraded"]),
             ))
             if connection is None:
                 raise LookupError("Instagram connection not found")

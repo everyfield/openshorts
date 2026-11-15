@@ -300,7 +300,6 @@ async def list_instagram_publish_jobs(*, owner_id: UUID, limit: int = 50) -> lis
         return [{
             **_job_result(job, target),
             "caption": job.caption,
-            "clip_title": job.source_job_id or "Archived clip",
             "account": account_name,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "completed_at": target.completed_at.isoformat() if target.completed_at else None,
@@ -315,8 +314,10 @@ async def reconcile_instagram_publish_job(
     if outcome not in {"published", "not_published"}:
         raise ValueError("Outcome must be published or not_published")
     if outcome == "published":
-        if not media_id or len(media_id) > 255 or any(ch.isspace() for ch in media_id):
-            raise ValueError("A valid Instagram media ID is required")
+        if media_id is not None and (
+            not media_id or len(media_id) > 255 or any(ch.isspace() for ch in media_id)
+        ):
+            raise ValueError("A valid Instagram media ID is required when supplied")
     elif media_id:
         raise ValueError("Media ID must be omitted when confirming not published")
 
